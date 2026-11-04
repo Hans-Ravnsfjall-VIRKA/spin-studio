@@ -1,6 +1,7 @@
 import { STEPS_PER_BAR, midiToFreq, stepDuration, stepEvents } from '../models/synthPatternModel';
 import type { TimelineEntry } from '../models/classPlanModel';
 import { totalDuration } from '../models/classPlanModel';
+import { externalAction } from '../models/externalPlayModel';
 import type { Track } from '../models/trackModel';
 import { getAudioContext } from './context';
 import {
@@ -15,6 +16,15 @@ import {
 export type EngineStatus = 'idle' | 'playing' | 'paused' | 'finished';
 
 export type BufferLoader = (track: Track) => Promise<AudioBuffer | null>;
+
+/** A player the browser audio clock cannot schedule, such as Spotify's. */
+export interface ExternalPlayer {
+  isReady(): boolean;
+  play(uri: string, positionSec: number): Promise<void>;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  setVolume(volume: number): void;
+}
 
 const TICK_MS = 40;
 const LOOKAHEAD_SEC = 0.25;
@@ -44,6 +54,9 @@ export class ClassEngine {
   private synthNext = new Map<number, number>();
   private fileStarted = new Set<number>();
   private buffers = new Map<string, AudioBuffer>();
+  private external: ExternalPlayer | null = null;
+  /** Index of the timeline entry the external player is playing, or null. */
+  private extActive: number | null = null;
 
   onFinished: (() => void) | null = null;
   onError: ((message: string) => void) | null = null;
@@ -54,6 +67,10 @@ export class ClassEngine {
 
   getTimeline(): TimelineEntry[] {
     return this.timeline;
+  }
+
+  setExternal(player: ExternalPlayer | null): void {
+    this.external = player;
   }
 
   get total(): number {
@@ -77,6 +94,7 @@ export class ClassEngine {
   setVolume(value: number): void {
     this.volume = Math.max(0, Math.min(1, value));
     if (this.master) this.master.gain.value = this.volume;
+    this.external?.setVolume(this.volume);
   }
 
   async play(fromElapsed = 0): Promise<void> {
@@ -95,12 +113,20 @@ export class ClassEngine {
     if (this.status !== 'playing') return;
     await getAudioContext().suspend();
     this.status = 'paused';
+    await this.pauseExternal();
   }
 
   async resume(): Promise<void> {
     if (this.status !== 'paused') return;
     await getAudioContext().resume();
     this.status = 'playing';
+    if (this.extActive !== null && this.external) {
+      try {
+        await this.external.resume();
+      } catch {
+        /* the next tick will not restart it, the rider can press play again */
+      }
+    }
   }
 
   async toggle(): Promise<void> {
@@ -156,6 +182,19 @@ export class ClassEngine {
     }
     this.synthNext.clear();
     this.fileStarted.clear();
+    if (this.extActive !== null) {
+      void this.pauseExternal();
+      this.extActive = null;
+    }
+  }
+
+  private async pauseExternal(): Promise<void> {
+    if (this.extActive === null || !this.external) return;
+    try {
+      await this.external.pause();
+    } catch {
+      /* already paused or disconnected */
+    }
   }
 
   private teardown(): void {
@@ -201,6 +240,7 @@ export class ClassEngine {
 
     this.tickSynth(ctx);
     this.tickFiles(ctx, elapsed);
+    this.tickExternal(elapsed);
     this.releaseBuffers(elapsed);
   }
 
@@ -313,6 +353,22 @@ export class ClassEngine {
     src.connect(bus);
     src.start(when, offset);
     this.sources.push(src);
+  }
+
+  private tickExternal(elapsed: number): void {
+    const ext = this.external;
+    if (!ext) return;
+    const action = externalAction(this.timeline, elapsed, this.extActive);
+    if (action.kind === 'play') {
+      this.extActive = action.index;
+      const title = this.timeline[action.index].track.title;
+      ext.play(action.uri, action.positionSec).catch((err: unknown) => {
+        this.onError?.(err instanceof Error && err.message ? err.message : `Spotify could not play "${title}".`);
+      });
+    } else if (action.kind === 'pause') {
+      this.extActive = null;
+      ext.pause().catch(() => undefined);
+    }
   }
 
   private releaseBuffers(elapsed: number): void {

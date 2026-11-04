@@ -5,6 +5,7 @@ import { Builder } from './components/Builder';
 import { Discover } from './components/Discover';
 import { Library } from './components/Library';
 import { Ride } from './components/Ride';
+import { SpotifyPanel } from './components/SpotifyPanel';
 import { BUILTIN_TRACKS } from './data/builtinTracks';
 import { useEngineStatus } from './hooks/useEngineClock';
 import { useLibrary } from './hooks/useLibrary';
@@ -16,15 +17,21 @@ import {
   type PlanItem,
   type TimelineEntry,
 } from './models/classPlanModel';
+import { usesExternalPlayer } from './models/externalPlayModel';
 import type { SegmentType } from './models/segmentModel';
 import type { Track } from './models/trackModel';
+import { finishLoginFromUrl } from './spotify/auth';
+import { spotify } from './spotify/controller';
 import { loadClasses, loadDraft, saveClasses, saveDraft } from './storage/libraryStorage';
 
-type View = 'library' | 'find' | 'build' | 'ride';
+type View = 'library' | 'find' | 'spotify' | 'build' | 'ride';
+
+const SPOTIFY_NEEDED = 'This class has Spotify songs. Open the Spotify tab and connect first.';
 
 const TAB_LABELS: Record<View, string> = {
   library: 'Music',
   find: 'Find music',
+  spotify: 'Spotify',
   build: 'Build',
   ride: 'Ride',
 };
@@ -67,7 +74,24 @@ export default function App() {
   useEffect(() => {
     classEngine.onError = setError;
     previewEngine.onError = setError;
+    classEngine.setExternal(spotify);
+    previewEngine.setExternal(spotify);
   }, [classEngine, previewEngine]);
+
+  // Complete a Spotify sign-in when Spotify sent the browser back here, or reconnect a saved one.
+  useEffect(() => {
+    void finishLoginFromUrl().then((result) => {
+      if (result.kind === 'connected') {
+        setView('spotify');
+        void spotify.start();
+      } else if (result.kind === 'error') {
+        setView('spotify');
+        spotify.reportError(result.message);
+      } else {
+        spotify.resumeIfSignedIn();
+      }
+    });
+  }, []);
 
   const trackById = useMemo(() => new Map(library.tracks.map((t) => [t.id, t])), [library.tracks]);
 
@@ -84,7 +108,15 @@ export default function App() {
       }
       await previewEngine.stop();
       const item: PlanItem = { id: 'preview', trackId: track.id, type };
-      previewEngine.load(buildTimeline([item], [track]), loadTrackBuffer);
+      const single = buildTimeline([item], [track]);
+      if (usesExternalPlayer(single)) {
+        if (!spotify.isReady()) {
+          setError(SPOTIFY_NEEDED);
+          return;
+        }
+        spotify.activate();
+      }
+      previewEngine.load(single, loadTrackBuffer);
       previewEngine.onFinished = () => setPreviewingId(null);
       setPreviewingId(key);
       setError(null);
@@ -99,9 +131,17 @@ export default function App() {
   );
 
   const startClass = useCallback(async () => {
-    await stopPreview();
     const timeline = buildTimeline(draft.items, library.tracks);
     if (timeline.length === 0) return;
+    if (usesExternalPlayer(timeline)) {
+      if (!spotify.isReady()) {
+        setError(SPOTIFY_NEEDED);
+        return;
+      }
+      // Runs inside the click, which is what lets the browser play Spotify audio later.
+      spotify.activate();
+    }
+    await stopPreview();
     await classEngine.stop();
     classEngine.load(timeline, loadTrackBuffer);
     setRideTimeline(timeline);
@@ -130,7 +170,7 @@ export default function App() {
           Spin Studio
         </div>
         <nav className="tabs" aria-label="Sections">
-          {(['library', 'find', 'build', 'ride'] as View[]).map((v) => (
+          {(['library', 'find', 'spotify', 'build', 'ride'] as View[]).map((v) => (
             <button key={v} className={`tab${view === v ? ' on' : ''}`} onClick={() => setView(v)}>
               {TAB_LABELS[v]}
               {v === 'ride' && classStatus === 'playing' && <span className="live" />}
@@ -157,6 +197,7 @@ export default function App() {
           />
         )}
         {view === 'find' && <Discover library={library} previewDisabled={classActive} />}
+        {view === 'spotify' && <SpotifyPanel library={library} />}
         {view === 'build' && (
           <Builder
             tracks={library.tracks}

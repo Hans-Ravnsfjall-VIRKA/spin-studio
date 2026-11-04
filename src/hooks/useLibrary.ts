@@ -3,6 +3,7 @@ import { analyzeBlob } from '../audio/decode';
 import { BUILTIN_TRACKS } from '../data/builtinTracks';
 import { newId } from '../lib/id';
 import { creditFor, type OnlineTrack } from '../models/onlineSearchModel';
+import { newSpotifyTracks, trackFromSpotify, type SpotifyTrackInfo } from '../models/spotifyModel';
 import { clampBpm, clampEnergy, trackFromAnalysis, type Track } from '../models/trackModel';
 import { DownloadBlockedError, downloadAudio } from '../online/download';
 import { deleteAudio, putAudio } from '../storage/audioStore';
@@ -27,6 +28,8 @@ export interface Library {
   imports: ImportStatus[];
   addFiles: (files: FileList | File[]) => Promise<void>;
   importOnline: (online: OnlineTrack) => Promise<OnlineImportResult>;
+  /** Adds Spotify songs that are not in the library yet. A null tempo leaves it to be set later. Returns how many were added. */
+  addSpotify: (infos: SpotifyTrackInfo[], bpm: number | null) => number;
   updateTrack: (id: string, patch: Partial<Pick<Track, 'title' | 'artist' | 'bpm' | 'energy' | 'beatOffset'>>) => void;
   removeTrack: (id: string) => Promise<void>;
 }
@@ -128,11 +131,23 @@ export function useLibrary(): Library {
     [userTracks],
   );
 
+  const addSpotify = useCallback<Library['addSpotify']>(
+    (infos, bpm) => {
+      const fresh = newSpotifyTracks(infos, userTracks);
+      if (fresh.length === 0) return 0;
+      const added = fresh.map((info) => trackFromSpotify(info, bpm, newId('sp')));
+      setUserTracks((prev) => [...prev, ...added]);
+      return added.length;
+    },
+    [userTracks],
+  );
+
   const updateTrack = useCallback<Library['updateTrack']>((id, patch) => {
     setUserTracks((prev) =>
       prev.map((t) => {
         if (t.id !== id) return t;
         const next = { ...t, ...patch };
+        if (patch.bpm !== undefined) next.bpmKnown = true;
         next.bpm = clampBpm(next.bpm);
         next.energy = clampEnergy(next.energy);
         next.beatOffset = Math.max(0, next.beatOffset);
@@ -150,5 +165,5 @@ export function useLibrary(): Library {
     }
   }, []);
 
-  return { tracks, userTracks, imports, addFiles, importOnline, updateTrack, removeTrack };
+  return { tracks, userTracks, imports, addFiles, importOnline, addSpotify, updateTrack, removeTrack };
 }

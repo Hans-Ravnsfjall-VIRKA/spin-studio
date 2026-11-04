@@ -148,7 +148,7 @@ export function Builder({
         </div>
         <SegmentStrip timeline={timeline} height={84} />
         <div className="strip-legend">
-          <span>Bar height and color show resistance, blue to red</span>
+          <span>Bar height and color show resistance: white is none, then blue, green, yellow and red</span>
         </div>
       </div>
 

@@ -3,7 +3,8 @@ import type { Library as LibraryState } from '../hooks/useLibrary';
 import { matchTrack, rankTracks } from '../models/classPlanModel';
 import { formatClock } from '../models/formatModel';
 import { SEGMENT_SPECS, SEGMENT_TYPES, type SegmentType } from '../models/segmentModel';
-import { clampBpm, type Track } from '../models/trackModel';
+import { addTap, bpmFromTaps } from '../models/tapTempoModel';
+import { clampBpm, isTempoKnown, type Track } from '../models/trackModel';
 
 interface Props {
   library: LibraryState;
@@ -82,8 +83,9 @@ export function Library({ library, onPreview, previewingId, previewDisabled }: P
       <div className="panel">
         {rows.length === 0 && <p className="muted">No songs fit that segment yet. Add some music in that tempo range.</p>}
         {rows.map((t) => {
-          const mine = t.source === 'file';
-          const fits = SEGMENT_TYPES.filter((type) => matchTrack(t, type).cadenceInRange);
+          const mine = t.source !== 'synth';
+          const known = isTempoKnown(t);
+          const fits = known ? SEGMENT_TYPES.filter((type) => matchTrack(t, type).cadenceInRange) : [];
           const playing = previewingId === `lib-${t.id}`;
           return (
             <div className="trow" key={t.id}>
@@ -98,7 +100,7 @@ export function Library({ library, onPreview, previewingId, previewDisabled }: P
               <div className="tinfo">
                 <div className="ttitle">{t.title}</div>
                 <div className="muted small-text">
-                  {t.artist} · {formatClock(t.duration)} · {t.credit ? 'Free music' : mine ? 'Your file' : 'Built in'}
+                  {t.artist} · {formatClock(t.duration)} · {t.credit ? 'Free music' : t.source === 'spotify' ? 'Spotify' : mine ? 'Your file' : 'Built in'}
                   {t.credit && (
                     <>
                       {' · '}
@@ -113,7 +115,8 @@ export function Library({ library, onPreview, previewingId, previewDisabled }: P
                   )}
                 </div>
                 <div className="chips">
-                  {fits.length === 0 && <span className="chip small dim">No segment fits</span>}
+                  {!known && <span className="chip small attention">Set the tempo to use this song</span>}
+                  {known && fits.length === 0 && <span className="chip small dim">No segment fits</span>}
                   {fits.map((type) => {
                     const m = matchTrack(t, type);
                     return (
@@ -144,6 +147,7 @@ export function Library({ library, onPreview, previewingId, previewDisabled }: P
                       <button className="btn icon" onClick={() => updateTrack(t.id, { bpm: clampBpm(t.bpm * 2) })} aria-label="Double tempo">
                         ×2
                       </button>
+                      <TapButton onBpm={(bpm) => updateTrack(t.id, { bpm })} />
                       <span className="muted">BPM</span>
                     </div>
                     <label className="energy">
@@ -173,5 +177,24 @@ export function Library({ library, onPreview, previewingId, previewDisabled }: P
         })}
       </div>
     </section>
+  );
+}
+
+/** Tap along with the song. Four or more taps set the tempo, and it keeps refining as you tap. */
+function TapButton({ onBpm }: { onBpm: (bpm: number) => void }) {
+  const [taps, setTaps] = useState<number[]>([]);
+  return (
+    <button
+      className="btn icon"
+      title="Tap along with the beat to set the tempo"
+      onClick={() => {
+        const next = addTap(taps, performance.now());
+        setTaps(next);
+        const bpm = bpmFromTaps(next);
+        if (bpm !== null) onBpm(bpm);
+      }}
+    >
+      {taps.length > 0 ? `Tap ${taps.length}` : 'Tap'}
+    </button>
   );
 }

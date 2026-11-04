@@ -1,6 +1,6 @@
 # Spin Studio
 
-A React + TypeScript app for hosting spinning classes. Music and program live in one app: every song is matched to a segment by cadence and energy, and every segment carries resistance cues from blue (1) to red (10) that change on the bars of the song.
+A React + TypeScript app for hosting spinning classes. Music and program live in one app: every song is matched to a segment by cadence and energy, and every segment carries resistance cues, color coded in zones, that change on the bars of the song.
 
 ## Run
 
@@ -16,7 +16,17 @@ npm run build    # static build in dist/
 ## How a class works
 
 - Cadence: a rider pedals once per beat, or once per two beats (half time). A 140 BPM song is a 70 RPM climb, a 100 BPM song is a 100 RPM flat. The app picks whichever lands in the segment's range.
-- Resistance: levels 1 to 10, colored blue to red. Climbs ramp up, intervals alternate recover and push, cool downs ramp down.
+- Resistance: levels 1 to 10 in color zones. Climbs ramp up, intervals alternate recover and push, cool downs ramp down.
+
+| Zone | Levels |
+| --- | --- |
+| White (no resistance) | 1 |
+| Blue | 2 to 3 |
+| Green | 4 to 5 |
+| Yellow | 6 to 7 |
+| Red | 8 to 10 |
+
+Zones live in `src/models/resistanceModel.ts`.
 - Cues land on bars: resistance changes happen on whole blocks of bars of the song, using the song's BPM and first beat position.
 
 | Segment | Cadence RPM | Resistance |
@@ -41,6 +51,11 @@ Ranges and levels live in `src/models/segmentModel.ts`.
   - Only CC0, public domain, CC BY and CC BY-SA are listed. Non commercial (NC) and no derivatives (ND) tracks are filtered out. The creator and license are kept with the song and shown on the Ride screen, which is the attribution those licenses require.
   - Some hosts block downloads from a web page (CORS). The row then links to the source page: save the file there and add it with Add your music.
   - Check the terms of each catalog for use in a business, and note that performing rights societies may still claim fees for some artists.
+- Spotify tab (private use only): sign in with your own Spotify Premium account, import your own playlists or search, and play them inside the app through Spotify's Web Playback SDK. Spotify's terms cover personal use, so this is not for teaching other people.
+  - One time setup: create an app at developer.spotify.com/dashboard (Web API and Web Playback SDK), add the Redirect URI the Spotify tab shows, add your own account under User Management, paste the Client ID.
+  - Spotify gives no tempo data, so imported songs start with an unknown tempo. Play the song from the Music tab and press Tap along with the beat (or type the BPM). Songs with no tempo stay out of classes until set.
+  - Class songs play one after another through the player. Resistance cues follow the class clock, so they can sit up to about half a second off the music.
+  - Desktop browsers only. The Spotify player does not run in phone browsers.
 - Files are stored in the browser (IndexedDB). They stay on the device that imported them.
 
 ## Layout

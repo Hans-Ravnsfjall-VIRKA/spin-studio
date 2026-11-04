@@ -9,7 +9,7 @@ import {
   type Cue,
   type SegmentType,
 } from './segmentModel';
-import type { Track } from './trackModel';
+import { isTempoKnown, type Track } from './trackModel';
 
 export interface PlanItem {
   id: string;
@@ -66,6 +66,7 @@ export function matchTrack(track: Track, type: SegmentType): TrackMatch {
 
 export function rankTracks(tracks: Track[], type: SegmentType): TrackMatch[] {
   return tracks
+    .filter(isTempoKnown)
     .map((t) => matchTrack(t, type))
     .sort((a, b) => b.score - a.score || a.track.title.localeCompare(b.track.title));
 }

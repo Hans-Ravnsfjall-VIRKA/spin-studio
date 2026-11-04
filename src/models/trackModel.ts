@@ -1,4 +1,4 @@
-export type TrackSource = 'synth' | 'file';
+export type TrackSource = 'synth' | 'file' | 'spotify';
 
 /** Attribution for tracks that came from a free music catalog. */
 export interface TrackCredit {
@@ -28,6 +28,14 @@ export interface Track {
   fileName?: string;
   /** Present on tracks fetched from a free music catalog. */
   credit?: TrackCredit;
+  /** Spotify tracks only: spotify:track:... */
+  spotifyUri?: string;
+  /** False until the tempo has been set by hand. Such songs stay out of automatic matching. */
+  bpmKnown?: boolean;
+}
+
+export function isTempoKnown(track: Track): boolean {
+  return track.bpmKnown !== false;
 }
 
 export const MIN_BPM = 40;

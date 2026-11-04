@@ -27,7 +27,7 @@ export interface SegmentSpec {
   cadence: CadenceRange;
   /** Wanted song energy, 1 to 5. */
   energy: number;
-  /** Resistance span on the 1 to 10 blue to red scale. */
+  /** Resistance span on the 1 to 10 scale (white, blue, green, yellow, red). */
   resistance: { low: number; high: number };
 }
 

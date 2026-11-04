@@ -152,7 +152,7 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
       </div>
 
       <div className="ride-main">
-        <div className="ride-level" style={{ background: `linear-gradient(160deg, ${resistanceColor(level, 48)}, ${resistanceColor(level, 32)})` }}>
+        <div className="ride-level" style={{ background: `linear-gradient(160deg, ${resistanceColor(level, 6)}, ${resistanceColor(level, -8)})` }}>
           <div className="ride-level-label">Resistance</div>
           <div className="ride-level-value">{level}</div>
           <div className="ride-level-name">{resistanceName(level)}</div>

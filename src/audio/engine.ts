@@ -1,6 +1,6 @@
 import { STEPS_PER_BAR, midiToFreq, stepDuration, stepEvents } from '../models/synthPatternModel';
 import type { TimelineEntry } from '../models/classPlanModel';
-import { totalDuration } from '../models/classPlanModel';
+import { holdPointAt, totalDuration } from '../models/classPlanModel';
 import { externalAction } from '../models/externalPlayModel';
 import type { Track } from '../models/trackModel';
 import { getAudioContext } from './context';
@@ -58,11 +58,30 @@ export class ClassEngine {
   /** Index of the timeline entry the external player is playing, or null. */
   private extActive: number | null = null;
 
+  /** When true the class waits at the end of each song until the instructor presses play. */
+  pauseBetween = false;
+  private holdAt: number | null = null;
+  private holding = false;
+
   onFinished: (() => void) | null = null;
   onError: ((message: string) => void) | null = null;
 
   getStatus(): EngineStatus {
     return this.status;
+  }
+
+  /** True while the class waits between two songs. */
+  isHolding(): boolean {
+    return this.holding && this.status === 'paused';
+  }
+
+  setPauseBetween(on: boolean): void {
+    this.pauseBetween = on;
+    this.updateHold(this.elapsed);
+  }
+
+  private updateHold(elapsed: number): void {
+    this.holdAt = this.pauseBetween ? holdPointAt(this.timeline, elapsed) : null;
   }
 
   getTimeline(): TimelineEntry[] {
@@ -86,6 +105,7 @@ export class ClassEngine {
 
   load(timeline: TimelineEntry[], loader: BufferLoader): void {
     this.teardown();
+    this.holding = false;
     this.timeline = timeline;
     this.loader = loader;
     this.status = 'idle';
@@ -105,6 +125,8 @@ export class ClassEngine {
     const start = Math.max(0, Math.min(fromElapsed, this.total - 0.001));
     this.t0 = ctx.currentTime - start;
     this.status = 'playing';
+    this.holding = false;
+    this.updateHold(start);
     this.schedule(start);
     this.startTimer();
   }
@@ -120,6 +142,8 @@ export class ClassEngine {
     if (this.status !== 'paused') return;
     await getAudioContext().resume();
     this.status = 'playing';
+    this.holding = false;
+    this.updateHold(this.elapsed);
     if (this.extActive !== null && this.external) {
       try {
         await this.external.resume();
@@ -143,10 +167,12 @@ export class ClassEngine {
     const ctx = getAudioContext();
     const target = Math.max(0, Math.min(elapsed, this.total - 0.001));
     this.t0 = ctx.currentTime - target;
+    this.updateHold(target);
     this.schedule(target);
   }
 
   async stop(): Promise<void> {
+    this.holding = false;
     this.teardown();
     this.status = 'idle';
     const ctx = getAudioContext();
@@ -238,10 +264,24 @@ export class ClassEngine {
       return;
     }
 
+    if (this.holdAt !== null && elapsed >= this.holdAt) {
+      void this.hold();
+      return;
+    }
+
     this.tickSynth(ctx);
     this.tickFiles(ctx, elapsed);
     this.tickExternal(elapsed);
     this.releaseBuffers(elapsed);
+  }
+
+  /** Wait at the end of a song. The next song starts when the instructor presses play. */
+  private async hold(): Promise<void> {
+    this.holdAt = null;
+    this.holding = true;
+    await this.pause();
+    // The song just ended. Forget it so the next song starts fresh after resume.
+    this.extActive = null;
   }
 
   private finish(): void {

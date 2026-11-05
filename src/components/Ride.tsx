@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ClassEngine } from '../audio/engine';
 import { useEngineClock } from '../hooks/useEngineClock';
-import { pedalPhaseAt, stateAt, type TimelineEntry } from '../models/classPlanModel';
+import { changeAhead, pedalPhaseAt, stateAt, type TimelineEntry } from '../models/classPlanModel';
 import { formatClock } from '../models/formatModel';
 import { creditLine } from '../models/onlineSearchModel';
 import type { TrackCredit } from '../models/trackModel';
@@ -23,8 +23,28 @@ type WakeLockSentinelLike = { release: () => Promise<void> };
 export function Ride({ engine, timeline, error, onBuild }: Props) {
   const clock = useEngineClock(engine);
   const [volume, setVolume] = useState(0.9);
+  const [pauseBetween, setPauseBetween] = useState(engine.pauseBetween);
+  const [flash, setFlash] = useState<{ key: number; label: string; zone: string; color: string } | null>(null);
   const state = stateAt(timeline, clock.elapsed);
   const { status } = clock;
+  const cueKey = state.entry && state.cue ? `${state.entryIndex}:${state.cueIndex}` : '';
+  const holding = engine.isHolding();
+
+  // Flash the new instruction when a zone changes.
+  const [lastCue, setLastCue] = useState({ key: '', zone: '' });
+  useEffect(() => {
+    if (status !== 'playing' || !state.cue) return;
+    const zone = resistanceName(state.cue.resistance);
+    if (lastCue.key !== '' && lastCue.key !== cueKey && lastCue.zone !== zone) {
+      setFlash({ key: Date.now(), label: state.cue.label, zone, color: resistanceColor(state.cue.resistance) });
+    }
+    if (lastCue.key !== cueKey) setLastCue({ key: cueKey, zone });
+  }, [cueKey, status, state.cue, lastCue]);
+  useEffect(() => {
+    if (!flash) return;
+    const id = window.setTimeout(() => setFlash(null), 2500);
+    return () => window.clearTimeout(id);
+  }, [flash]);
 
   // Keep the screen awake while a class is running.
   useEffect(() => {
@@ -138,6 +158,18 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
 
   return (
     <section className="ride" style={{ ['--rc' as string]: color }}>
+      {flash && (
+        <div className="changeflash" key={flash.key} style={{ background: flash.color }} aria-live="assertive">
+          <span className="changeflash-zone">{flash.zone}</span>
+          <span className="changeflash-label">{flash.label}</span>
+        </div>
+      )}
+      {holding && (
+        <div className="holdbar">
+          <strong>Song finished.</strong>{' '}
+          {state.entry ? `Next: ${state.entry.track.title}. ` : ''}Press play when the class is ready.
+        </div>
+      )}
       <div className="ride-top">
         <div className="ride-seg">
           <span className="chip">{entry ? SEGMENT_SPECS[entry.item.type].label : 'Ready'}</span>
@@ -175,6 +207,18 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
           sublabel={cadenceNote}
         />
       </div>
+
+      {(() => {
+        const ahead = status === 'playing' ? changeAhead(state, 5) : null;
+        return ahead ? (
+          <div className="warning" style={{ background: resistanceColor(ahead.cue.resistance) }}>
+            <span className="warning-count">{Math.max(1, Math.ceil(ahead.seconds))}</span>
+            <span>
+              {resistanceName(ahead.cue.resistance)}: {ahead.cue.label}
+            </span>
+          </div>
+        ) : null;
+      })()}
 
       <ResistanceScale level={level} nextLevel={nextLevel} large />
 
@@ -225,6 +269,17 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
               engine.setVolume(v);
             }}
           />
+        </label>
+        <label className="vol">
+          <input
+            type="checkbox"
+            checked={pauseBetween}
+            onChange={(e) => {
+              setPauseBetween(e.target.checked);
+              engine.setPauseBetween(e.target.checked);
+            }}
+          />{' '}
+          Stop between songs
         </label>
         <button
           className="btn"

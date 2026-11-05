@@ -75,6 +75,7 @@ export default function App() {
     classEngine.onError = setError;
     previewEngine.onError = setError;
     classEngine.setExternal(spotify);
+    classEngine.setPauseBetween(true);
     previewEngine.setExternal(spotify);
   }, [classEngine, previewEngine]);
 

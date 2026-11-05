@@ -10,6 +10,7 @@ import {
   type SegmentType,
 } from './segmentModel';
 import { customCuesToCues, customDuration, type CustomSegment } from './customPlanModel';
+import { resistanceName } from './resistanceModel';
 import { isTempoKnown, type Track } from './trackModel';
 
 export interface PlanItem {
@@ -174,6 +175,32 @@ export function stateAt(timeline: TimelineEntry[], elapsed: number): PlaybackSta
     nextCue,
     nextEntry,
   };
+}
+
+/** Class time where a song ends and the class should wait, or null in the last song. */
+export function holdPointAt(timeline: TimelineEntry[], elapsed: number): number | null {
+  const i = timeline.findIndex((e) => elapsed >= e.start && elapsed < e.end);
+  if (i < 0 || i >= timeline.length - 1) return null;
+  return timeline[i].end;
+}
+
+export interface ChangeAhead {
+  /** Seconds until the change. */
+  seconds: number;
+  cue: Cue;
+}
+
+/**
+ * The next zone change when it is within `windowSec`. Cues that keep the same zone
+ * are not reported, except in written plans where each cue is an instruction (sit, stand, sprint).
+ */
+export function changeAhead(state: PlaybackState, windowSec: number): ChangeAhead | null {
+  const { cue, nextCue } = state;
+  if (!cue || !nextCue || state.cueRemaining > windowSec) return null;
+  const sameZone = resistanceName(cue.resistance) === resistanceName(nextCue.resistance);
+  const instruction = cue.zone !== undefined && nextCue.zone !== undefined && cue.label !== nextCue.label;
+  if (sameZone && !instruction) return null;
+  return { seconds: state.cueRemaining, cue: nextCue };
 }
 
 /** Position within the current pedal stroke, 0 up to 1, so the UI can pulse on the beat. */

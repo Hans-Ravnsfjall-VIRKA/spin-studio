@@ -14,12 +14,14 @@ interface Props {
   engine: ClassEngine;
   timeline: TimelineEntry[];
   error: string | null;
+  /** The instructor starts each Spotify song in the Spotify app. */
+  manualMusic: boolean;
   onBuild: () => void;
 }
 
 type WakeLockSentinelLike = { release: () => Promise<void> };
 
-export function Ride({ engine, timeline, error, onBuild }: Props) {
+export function Ride({ engine, timeline, error, manualMusic, onBuild }: Props) {
   const clock = useEngineClock(engine);
   const sp = useSpotify();
   const [volume, setVolume] = useState(0.9);
@@ -176,7 +178,12 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
         <div className="ride-artist">{shown.track.artist}</div>
       </div>
 
-      {holding && (
+      {manualMusic && shown.track.source === 'spotify' && (status === 'idle' || holding) && (
+        <div className="holdbar">
+          <strong>Start in Spotify:</strong> {shown.track.title}, {shown.track.artist}. Then press play here.
+        </div>
+      )}
+      {holding && !manualMusic && (
         <div className="holdbar">
           <strong>Song finished.</strong> Press play when the class is ready.
         </div>

@@ -308,21 +308,11 @@ class SpotifyController implements ExternalPlayer {
         method: 'PUT',
         body: JSON.stringify({ uris: [uri], position_ms: Math.round(positionSec * 1000) }),
       });
-    let res = await send();
+    const res = await send();
     if (this.snap.remote && [404, 502, 503].includes(res.status)) {
-      // The Spotify app on the phone is asleep or not the active device. Wake it by moving playback to it, then try again.
-      await this.request('/me/player', {
-        method: 'PUT',
-        body: JSON.stringify({ device_ids: [device], play: false }),
-      }).catch(() => undefined);
-      await new Promise((r) => setTimeout(r, 1200));
-      res = await send();
-      if (!res.ok && res.status !== 204) {
-        throw new Error(
-          `Spotify could not reach ${this.snap.deviceName || 'the device'} (${res.status}). Open the Spotify app on it, play any song for a few seconds, then try again.`,
-        );
-      }
-      return;
+      throw new Error(
+        `Spotify could not reach ${this.snap.deviceName || 'the device'} (${res.status}). iPhone does not let other apps start Spotify reliably. Use "I start each song myself" under How music plays.`,
+      );
     }
     if (!res.ok && res.status !== 204) throw apiError(res);
   }

@@ -28,6 +28,24 @@ function writeJson(store: Storage, key: string, value: unknown): void {
   }
 }
 
+const MODE_KEY = 'spin-studio.musicmode.v1';
+
+export function loadMusicMode(): string | null {
+  try {
+    return localStorage.getItem(MODE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveMusicMode(mode: string): void {
+  try {
+    localStorage.setItem(MODE_KEY, mode);
+  } catch {
+    /* the choice just will not be remembered */
+  }
+}
+
 export function loadClientId(): string {
   try {
     return localStorage.getItem(CLIENT_KEY) ?? '';

@@ -17,7 +17,10 @@ import {
   type PlanItem,
   type TimelineEntry,
 } from './models/classPlanModel';
+import { isIos } from './models/platformModel';
 import { usesExternalPlayer } from './models/externalPlayModel';
+import { defaultMusicMode, parseMusicMode, type MusicMode } from './models/musicModeModel';
+import { loadMusicMode, saveMusicMode } from './spotify/session';
 import { parsePlaylistId } from './models/spotifyModel';
 import type { SegmentType } from './models/segmentModel';
 import type { Track } from './models/trackModel';
@@ -28,6 +31,10 @@ import { spotify } from './spotify/controller';
 import { loadClasses, loadDraft, saveClasses, saveDraft } from './storage/libraryStorage';
 
 type View = 'library' | 'find' | 'spotify' | 'build' | 'ride';
+
+function isIosDevice(): boolean {
+  return isIos(navigator.userAgent, navigator.platform, navigator.maxTouchPoints);
+}
 
 const SPOTIFY_NEEDED = 'This class has Spotify songs. Open the Spotify tab, connect and pick where to play.';
 
@@ -58,6 +65,14 @@ export default function App() {
   const classStatus = useEngineStatus(classEngine);
   const [rideTimeline, setRideTimeline] = useState<TimelineEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [musicMode, setMusicModeState] = useState<MusicMode>(
+    () => parseMusicMode(loadMusicMode()) ?? defaultMusicMode(isIosDevice()),
+  );
+  const manualMusic = musicMode === 'manual';
+  const setMusicMode = (m: MusicMode) => {
+    setMusicModeState(m);
+    saveMusicMode(m);
+  };
   const [previewingId, setPreviewingId] = useState<string | null>(null);
 
   const classActive = classStatus === 'playing' || classStatus === 'paused';
@@ -77,10 +92,10 @@ export default function App() {
   useEffect(() => {
     classEngine.onError = setError;
     previewEngine.onError = setError;
-    classEngine.setExternal(spotify);
+    classEngine.setExternal(manualMusic ? null : spotify);
     classEngine.setPauseBetween(true);
     previewEngine.setExternal(spotify);
-  }, [classEngine, previewEngine]);
+  }, [classEngine, previewEngine, manualMusic]);
 
   // Complete a Spotify sign-in when Spotify sent the browser back here, or reconnect a saved one.
   useEffect(() => {
@@ -145,6 +160,10 @@ export default function App() {
       await previewEngine.stop();
       const item: PlanItem = { id: 'preview', trackId: track.id, type };
       const single = buildTimeline([item], [track]);
+      if (manualMusic && usesExternalPlayer(single)) {
+        setError('Preview needs automatic Spotify. Play the song in the Spotify app instead.');
+        return;
+      }
       if (usesExternalPlayer(single)) {
         if (!spotify.isReady()) {
           setError(SPOTIFY_NEEDED);
@@ -169,7 +188,7 @@ export default function App() {
   const startClass = useCallback(async () => {
     const timeline = buildTimeline(draft.items, library.tracks);
     if (timeline.length === 0) return;
-    if (usesExternalPlayer(timeline)) {
+    if (!manualMusic && usesExternalPlayer(timeline)) {
       if (!spotify.isReady()) {
         setError(SPOTIFY_NEEDED);
         return;
@@ -245,7 +264,7 @@ export default function App() {
           />
         )}
         {view === 'find' && <Discover library={library} previewDisabled={classActive} />}
-        {view === 'spotify' && <SpotifyPanel library={library} />}
+        {view === 'spotify' && <SpotifyPanel library={library} musicMode={musicMode} onMusicMode={setMusicMode} />}
         {view === 'build' && (
           <Builder
             tracks={library.tracks}
@@ -269,7 +288,7 @@ export default function App() {
           />
         )}
         {view === 'ride' && (
-          <Ride engine={classEngine} timeline={rideTimeline} error={error} onBuild={() => setView('build')} />
+          <Ride engine={classEngine} timeline={rideTimeline} error={error} manualMusic={manualMusic} onBuild={() => setView('build')} />
         )}
       </main>
     </div>

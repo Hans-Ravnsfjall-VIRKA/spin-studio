@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Library } from '../hooks/useLibrary';
 import { formatClock } from '../models/formatModel';
+import type { MusicMode } from '../models/musicModeModel';
 import { NATIVE_REDIRECT_URI, redirectUriFor, redirectUriProblem } from '../models/spotifyAuthModel';
 import { isNativeApp } from '../native';
 import {
@@ -18,9 +19,11 @@ import { useSpotify } from '../spotify/useSpotify';
 
 interface Props {
   library: Library;
+  musicMode: MusicMode;
+  onMusicMode: (mode: MusicMode) => void;
 }
 
-export function SpotifyPanel({ library }: Props) {
+export function SpotifyPanel({ library, musicMode, onMusicMode }: Props) {
   const snap = useSpotify();
   const [clientId, setClientId] = useState(() => loadClientId());
   const redirectUri = isNativeApp() ? NATIVE_REDIRECT_URI : redirectUriFor(window.location);
@@ -118,6 +121,22 @@ export function SpotifyPanel({ library }: Props) {
 
   return (
     <section className="spotify">
+      <div className="panel">
+        <h3>How music plays</h3>
+        <div className="row wrap">
+          <button className={`btn${musicMode === 'manual' ? ' primary' : ''}`} onClick={() => onMusicMode('manual')}>
+            I start each song myself
+          </button>
+          <button className={`btn${musicMode === 'auto' ? ' primary' : ''}`} onClick={() => onMusicMode('auto')}>
+            Control Spotify automatically
+          </button>
+        </div>
+        <p className="muted small-text">
+          {musicMode === 'manual'
+            ? 'Spin Studio shows the program and waits after each song. You start the song in the Spotify app, then press play here. This always works, also on iPhone.'
+            : 'Spin Studio starts each song in Spotify by itself. This works on a computer. On iPhone, Spotify often ignores it.'}
+        </p>
+      </div>
       <div className="panel">
         <h2>Spotify</h2>
         <p className="muted small-text">

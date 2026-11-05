@@ -50,6 +50,17 @@ export function unlockAudio(): void {
     /* not supported */
   }
   try {
+    // The classic iOS unlock: start one silent sound inside the tap.
+    const c = getAudioContext();
+    const src = c.createBufferSource();
+    src.buffer = c.createBuffer(1, 1, 22050);
+    src.connect(c.destination);
+    src.start(0);
+    void c.resume();
+  } catch {
+    /* the engine resumes the context itself */
+  }
+  try {
     const el = new Audio(silentWavUrl());
     el.loop = true;
     el.setAttribute('playsinline', '');

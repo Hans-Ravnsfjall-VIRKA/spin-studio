@@ -6,6 +6,8 @@ import { formatClock } from '../models/formatModel';
 import { creditLine } from '../models/onlineSearchModel';
 import type { TrackCredit } from '../models/trackModel';
 import { resistanceColor, resistanceName } from '../models/resistanceModel';
+import { usesExternalPlayer } from '../models/externalPlayModel';
+import { useSpotify } from '../spotify/useSpotify';
 import { BeatPulse } from './BeatPulse';
 
 interface Props {
@@ -19,6 +21,7 @@ type WakeLockSentinelLike = { release: () => Promise<void> };
 
 export function Ride({ engine, timeline, error, onBuild }: Props) {
   const clock = useEngineClock(engine);
+  const sp = useSpotify();
   const [volume, setVolume] = useState(0.9);
   const [pauseBetween, setPauseBetween] = useState(engine.pauseBetween);
   const [flash, setFlash] = useState<{ key: number; label: string; zone: string; color: string } | null>(null);
@@ -245,6 +248,14 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
       <details className="ride-more">
         <summary>More</summary>
         <div className="ride-more-body">
+          <div className="muted small-text">
+            Page audio: {engine.audioState()}.{' '}
+            {usesExternalPlayer(timeline)
+              ? sp.remote
+                ? `Spotify plays on ${sp.deviceName || 'no device chosen'}.`
+                : 'Spotify plays in this page.'
+              : 'No Spotify songs in this class.'}
+          </div>
           <div className="muted">
             Class time {formatClock(state.elapsed)}, {formatClock(Math.max(0, state.total - state.elapsed))} left
           </div>

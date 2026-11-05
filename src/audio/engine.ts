@@ -70,6 +70,15 @@ export class ClassEngine {
     return this.status;
   }
 
+  /** What the browser's audio is doing, for the More panel. */
+  audioState(): string {
+    try {
+      return getAudioContext().state;
+    } catch {
+      return 'unavailable';
+    }
+  }
+
   /** True while the class waits between two songs. */
   isHolding(): boolean {
     return this.holding && this.status === 'paused';

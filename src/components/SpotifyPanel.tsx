@@ -167,7 +167,12 @@ export function SpotifyPanel({ library }: Props) {
         )}
       </div>
 
-      {ready && snap.remote && <DevicePicker chosen={snap.deviceName} />}
+      {ready && snap.remote && (
+        <DevicePicker
+          chosen={snap.deviceName}
+          testUri={library.tracks.find((t) => t.source === 'spotify' && t.spotifyUri)?.spotifyUri ?? null}
+        />
+      )}
 
       {notice && <div className="notice">{notice}</div>}
 
@@ -252,7 +257,8 @@ export function SpotifyPanel({ library }: Props) {
   );
 }
 
-function DevicePicker({ chosen }: { chosen: string }) {
+function DevicePicker({ chosen, testUri }: { chosen: string; testUri: string | null }) {
+  const [testMsg, setTestMsg] = useState<string | null>(null);
   const [devices, setDevices] = useState<SpotifyDevice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -296,9 +302,31 @@ function DevicePicker({ chosen }: { chosen: string }) {
         ))}
         {devices?.length === 0 && <p className="muted">No devices found. Open the Spotify app and play a song first.</p>}
       </div>
-      <button className="btn" onClick={() => void refresh()} disabled={loading}>
-        {loading ? 'Looking...' : 'Refresh'}
-      </button>
+      <div className="row wrap">
+        <button className="btn" onClick={() => void refresh()} disabled={loading}>
+          {loading ? 'Looking...' : 'Refresh'}
+        </button>
+        <button
+          className="btn primary"
+          disabled={!chosen || !testUri}
+          onClick={async () => {
+            setTestMsg('Sending...');
+            try {
+              await spotify.play(testUri as string, 30);
+              setTestMsg(`Sent to ${chosen}. You should hear a song now. If not, open the Spotify app: is a song playing there?`);
+            } catch (e) {
+              setTestMsg(e instanceof Error ? e.message : 'Spotify refused the play command.');
+            }
+          }}
+        >
+          Test sound
+        </button>
+        <button className="btn" onClick={() => void spotify.pause().then(() => setTestMsg(null))}>
+          Stop
+        </button>
+      </div>
+      {testMsg && <div className="notice">{testMsg}</div>}
+      {!testUri && chosen && <p className="muted small-text">Add a song from a playlist first, then test.</p>}
     </div>
   );
 }

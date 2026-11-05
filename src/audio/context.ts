@@ -41,14 +41,16 @@ function silentWavUrl(): string {
  * start it from a tap. Playing a silent media element and asking for the playback
  * audio session lifts both limits. Call this from a tap, before the first sound.
  */
-export function unlockAudio(): void {
-  if (unlocked) return;
+export function unlockAudio(playsSound: boolean): void {
+  // "ambient" mixes with other apps, so the Spotify app keeps its full volume.
+  // "playback" is for songs this page plays itself, and it takes over the audio.
   try {
     const nav = navigator as Navigator & { audioSession?: { type: string } };
-    if (nav.audioSession) nav.audioSession.type = 'playback';
+    if (nav.audioSession) nav.audioSession.type = playsSound ? 'playback' : 'ambient';
   } catch {
     /* not supported */
   }
+  if (unlocked && !playsSound) return;
   try {
     // The classic iOS unlock: start one silent sound inside the tap.
     const c = getAudioContext();
@@ -60,6 +62,8 @@ export function unlockAudio(): void {
   } catch {
     /* the engine resumes the context itself */
   }
+  if (!playsSound) return;
+  if (unlocked) return;
   try {
     const el = new Audio(silentWavUrl());
     el.loop = true;

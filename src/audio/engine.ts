@@ -1,6 +1,5 @@
 import { STEPS_PER_BAR, midiToFreq, stepDuration, stepEvents } from '../models/synthPatternModel';
 import type { TimelineEntry } from '../models/classPlanModel';
-import { isNativeApp } from '../native';
 import { holdPointAt, totalDuration } from '../models/classPlanModel';
 import { externalAction } from '../models/externalPlayModel';
 import type { Track } from '../models/trackModel';
@@ -130,8 +129,8 @@ export class ClassEngine {
   async play(fromElapsed = 0): Promise<void> {
     if (this.timeline.length === 0) return;
     // Taking over the phone's audio would stop the Spotify app, so only do it for songs this page plays.
-    // In the installed app the audio session mixes with Spotify, and a silent sound keeps the clock running with the screen locked.
-    if (isNativeApp() || this.timeline.some((e) => e.track.source !== 'spotify')) unlockAudio();
+    // A class of only Spotify songs must not take over the phone's audio, or the Spotify app goes quiet.
+    unlockAudio(this.timeline.some((e) => e.track.source !== 'spotify'));
     const ctx = getAudioContext();
     this.ensureGraph(ctx);
     await ctx.resume();

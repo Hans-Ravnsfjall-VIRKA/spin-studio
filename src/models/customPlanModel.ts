@@ -7,6 +7,8 @@ export interface CustomCue {
   zone: ZoneId;
   /** Shown to the rider, in the instructor's own words. */
   label: string;
+  /** RPM for this section only. */
+  rpm?: number;
 }
 
 /** A song whose RPM and color changes come from the instructor's own plan. */
@@ -42,7 +44,14 @@ export function customCuesToCues(cues: CustomCue[], duration: number): Cue[] {
     const start = i === 0 ? 0 : Math.max(0, c.at);
     const end = i + 1 < sorted.length ? Math.max(0, sorted[i + 1].at) : duration;
     if (end > start) {
-      out.push({ start, end, resistance: ZONE_LEVEL[c.zone], zone: c.zone, label: c.label });
+      out.push({
+        start,
+        end,
+        resistance: ZONE_LEVEL[c.zone],
+        zone: c.zone,
+        label: c.label,
+        ...(c.rpm ? { rpm: c.rpm } : {}),
+      });
     }
   });
   return out;

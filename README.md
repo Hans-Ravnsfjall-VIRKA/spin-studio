@@ -62,6 +62,14 @@ Ranges and levels live in `src/models/segmentModel.ts`.
 
 Build tab, Written plan, Load plan. A plan keeps the instructor's own RPM per song and timed color changes (sit, stand, sprint), and can play only part of a song. Songs are found in the library by title and artist, so import the playlist first (Spotify tab, Open a playlist by link). Songs that are not found are picked by hand. Start class stays off until every song is picked. Plans live in `src/data/plans.ts`.
 
+## Editing a class
+
+Build tab, Edit on any song. Each song is split into sections with a zone (white, blue, green, yellow, red), an instruction and an optional own RPM. Use the arrows for a harder or easier section, plus or minus 5 RPM per section or for the whole song, add a section at a time, or apply a pattern: steady, steps up, steps down, pyramid, intervals, sit and stand, finish strong. Import program from PDF reads numbered lines like `1. RPM 62 í bláum (5:15): Artist: Title` with timed lines below them, and saves the plan in this browser.
+
+## iPhone
+
+Safari cannot run Spotify's player. In the Spotify tab, Play on lists your Spotify devices. Open the Spotify app on the phone, play a song for a second, press Refresh and pick it. The page then controls the app. Songs from files and the built-in songs play in the page itself.
+
 ## Layout
 
 ```

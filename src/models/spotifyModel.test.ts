@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hasMorePages,
   newSpotifyTracks,
+  normalizeDevices,
   normalizePlaylistItems,
   normalizePlaylists,
   normalizeSpotifySearch,
@@ -135,5 +136,21 @@ describe('tempo and tracks', () => {
     const existing: Track[] = [trackFromSpotify(info, 101, 'sp-1')];
     const other = { ...info, id: 'b', uri: 'spotify:track:b' };
     expect(newSpotifyTracks([info, other, other], existing).map((t) => t.id)).toEqual(['b']);
+  });
+});
+
+describe('normalizeDevices', () => {
+  it('keeps playable devices and skips restricted or id-less ones', () => {
+    const out = normalizeDevices({
+      devices: [
+        { id: 'a', name: 'Hans iPhone', type: 'Smartphone', is_active: true },
+        { id: 'b', name: 'Locked', type: 'Speaker', is_restricted: true },
+        { name: 'No id' },
+        null,
+      ],
+    });
+    expect(out).toEqual([{ id: 'a', name: 'Hans iPhone', type: 'Smartphone', isActive: true }]);
+    expect(normalizeDevices({})).toEqual([]);
+    expect(normalizeDevices(null)).toEqual([]);
   });
 });

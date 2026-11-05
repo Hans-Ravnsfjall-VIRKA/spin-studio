@@ -1,5 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { PLAN_TEMPLATES } from '../data/plans';
+import { readPdfText } from '../pdf/readPdf';
+import { loadPlans, savePlans } from '../storage/planStorage';
+import { parsePlanText } from '../models/planPdfModel';
+import { toCustom } from '../models/sectionEditModel';
+import { SectionEditor } from './SectionEditor';
 import { newId } from '../lib/id';
 import {
   CLASS_TEMPLATES,
@@ -21,6 +26,7 @@ import { instantiatePlan, unresolvedCount } from '../models/planImportModel';
 import { resistanceColor, resistanceName } from '../models/resistanceModel';
 import { SEGMENT_SPECS, SEGMENT_TYPES, resistanceSpan, type SegmentType } from '../models/segmentModel';
 import type { Track } from '../models/trackModel';
+import type { CustomSegment } from '../models/customPlanModel';
 import { SegmentStrip } from './SegmentStrip';
 
 interface Props {
@@ -66,6 +72,11 @@ export function Builder({
   const [minutes, setMinutes] = useState(45);
   const [addType, setAddType] = useState<SegmentType>('flat');
   const [planId, setPlanId] = useState(PLAN_TEMPLATES[0].id);
+  const [savedPlans, setSavedPlans] = useState(() => loadPlans());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const allPlans = useMemo(() => [...PLAN_TEMPLATES, ...savedPlans], [savedPlans]);
   const [link, setLink] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadMessage, setLoadMessage] = useState<string | null>(null);
@@ -82,7 +93,7 @@ export function Builder({
   );
 
   const loadPlan = async () => {
-    const plan = PLAN_TEMPLATES.find((p) => p.id === planId);
+    const plan = allPlans.find((p) => p.id === planId);
     if (!plan) return;
     let pool = tracks;
     let message: string | null = null;
@@ -102,6 +113,34 @@ export function Builder({
     onChange({ name: plan.name, items });
     setLoadMessage(message ?? (missing === 0 ? 'All songs found.' : `${missing} songs were not found. Pick them below.`));
   };
+
+  const importPdf = async (file: File) => {
+    setPdfBusy(true);
+    setLoadMessage(null);
+    try {
+      const plan = parsePlanText(await readPdfText(file), file.name.replace(/\.pdf$/i, ''));
+      if (!plan) {
+        setLoadMessage(
+          'No songs found in that PDF. It needs numbered lines like "1. RPM 62 í bláum (5:15): Artist: Title", with timed lines under them.',
+        );
+        return;
+      }
+      const rest = savedPlans.filter((p) => p.id !== plan.id);
+      const next = [...rest, plan];
+      setSavedPlans(next);
+      savePlans(next);
+      setPlanId(plan.id);
+      setLoadMessage(`Read ${plan.items.length} songs from "${plan.name}". Tap Load plan to use it.`);
+    } catch {
+      setLoadMessage('That PDF could not be read.');
+    } finally {
+      setPdfBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const setCustom = (id: string, custom: CustomSegment) =>
+    onChange({ items: updateItem(draft.items, id, { custom }) });
 
   const generate = () => {
     const items = autoBuildClass(tracks, template, minutes, {
@@ -175,7 +214,7 @@ export function Builder({
           <label className="field grow">
             <span>Written plan</span>
             <select value={planId} onChange={(e) => setPlanId(e.target.value)}>
-              {PLAN_TEMPLATES.map((p) => (
+              {allPlans.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -195,6 +234,19 @@ export function Builder({
           </label>
           <button className="btn primary" onClick={() => void loadPlan()} disabled={loading}>
             {loading ? 'Reading playlist...' : 'Load plan'}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importPdf(f);
+            }}
+          />
+          <button className="btn" onClick={() => fileRef.current?.click()} disabled={pdfBusy}>
+            {pdfBusy ? 'Reading PDF...' : 'Import program from PDF'}
           </button>
         </div>
         {loadMessage && <div className="notice">{loadMessage}</div>}
@@ -240,7 +292,8 @@ export function Builder({
             const span = entry ? resistanceSpan(entry.cues) : { low: 1, high: 1 };
             const playing = previewingId === item.id;
             return (
-              <div className="segrow" key={item.id}>
+              <div className="segwrap" key={item.id}>
+              <div className="segrow">
                 <div className="segnum">{idx + 1}</div>
                 {item.custom && (
                   <span className="chip plan" title={item.custom.note ?? 'From your written plan'}>
@@ -320,6 +373,14 @@ export function Builder({
                     {playing ? '■' : '▶'}
                   </button>
                   <button
+                    className="btn"
+                    onClick={() => setEditingId(editingId === item.id ? null : item.id)}
+                    disabled={!entry}
+                    aria-expanded={editingId === item.id}
+                  >
+                    {editingId === item.id ? 'Close' : 'Edit'}
+                  </button>
+                  <button
                     className="btn icon"
                     onClick={() => onChange({ items: moveItem(draft.items, item.id, -1) })}
                     disabled={idx === 0}
@@ -343,6 +404,14 @@ export function Builder({
                     ✕
                   </button>
                 </div>
+              </div>
+              {editingId === item.id && entry && (
+                <SectionEditor
+                  custom={item.custom ?? toCustom(entry)}
+                  duration={entry.duration}
+                  onChange={(c) => setCustom(item.id, c)}
+                />
+              )}
               </div>
             );
           })}

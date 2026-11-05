@@ -3,7 +3,7 @@ import type { TimelineEntry } from '../models/classPlanModel';
 import { holdPointAt, totalDuration } from '../models/classPlanModel';
 import { externalAction } from '../models/externalPlayModel';
 import type { Track } from '../models/trackModel';
-import { getAudioContext } from './context';
+import { getAudioContext, unlockAudio } from './context';
 import {
   makeNoiseBuffer,
   playBass,
@@ -119,6 +119,7 @@ export class ClassEngine {
 
   async play(fromElapsed = 0): Promise<void> {
     if (this.timeline.length === 0) return;
+    unlockAudio();
     const ctx = getAudioContext();
     this.ensureGraph(ctx);
     await ctx.resume();

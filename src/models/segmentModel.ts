@@ -98,6 +98,8 @@ export interface Cue {
   label: string;
   /** Set on cues that come from a written plan, which gives a color zone and no number. */
   zone?: ZoneId;
+  /** Set when this section has its own RPM, otherwise the song's RPM applies. */
+  rpm?: number;
 }
 
 /** Block length in bars (4 beats per bar). Cues change on bar boundaries of the song. */

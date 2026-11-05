@@ -6,10 +6,7 @@ import { formatClock } from '../models/formatModel';
 import { creditLine } from '../models/onlineSearchModel';
 import type { TrackCredit } from '../models/trackModel';
 import { resistanceColor, resistanceName } from '../models/resistanceModel';
-import { SEGMENT_SPECS, resistanceSpan } from '../models/segmentModel';
 import { BeatPulse } from './BeatPulse';
-import { ResistanceScale } from './ResistanceScale';
-import { SegmentStrip } from './SegmentStrip';
 
 interface Props {
   engine: ClassEngine;
@@ -126,8 +123,6 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
   const cue = state.cue;
   const level = cue?.resistance ?? 1;
   const color = resistanceColor(level);
-  const nextLevel = state.nextCue?.resistance ?? null;
-  const upcoming = timeline.slice((state.entryIndex < 0 ? timeline.length : state.entryIndex) + 1, (state.entryIndex < 0 ? timeline.length : state.entryIndex) + 4);
 
   if (status === 'finished' || (state.finished && status !== 'idle')) {
     return (
@@ -148,102 +143,90 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
     );
   }
 
-  const cadenceNote = entry?.item.custom
-    ? entry.item.custom.rpm
-      ? 'RPM from your plan'
-      : 'Free pace, no set RPM'
-    : entry && entry.pedalFactor === 0.5
-      ? 'Half time: one pedal stroke every 2 beats'
-      : 'One pedal stroke on every beat';
+  const shown = entry ?? timeline[0];
+  const rpm = cue?.rpm ?? shown.cadence;
+  const songLeft = entry ? state.entryRemaining : shown.duration;
+  const songDone = entry ? Math.min(1, Math.max(0, state.entryElapsed / entry.duration)) : 0;
+  const ahead = status === 'playing' ? changeAhead(state, 5) : null;
+  const cadenceNote = shown.item.custom
+    ? rpm > 0
+      ? 'RPM'
+      : 'Free pace'
+    : shown.pedalFactor === 0.5
+      ? 'RPM, half time'
+      : 'RPM';
 
   return (
-    <section className="ride" style={{ ['--rc' as string]: color }}>
+    <section className="ride simple" style={{ ['--rc' as string]: color }}>
       {flash && (
         <div className="changeflash" key={flash.key} style={{ background: flash.color }} aria-live="assertive">
           <span className="changeflash-zone">{flash.zone}</span>
           <span className="changeflash-label">{flash.label}</span>
         </div>
       )}
-      {holding && (
-        <div className="holdbar">
-          <strong>Song finished.</strong>{' '}
-          {state.entry ? `Next: ${state.entry.track.title}. ` : ''}Press play when the class is ready.
+
+      <div className="ride-song">
+        <div className="ride-count">
+          {entry ? `Song ${entry.index + 1} of ${timeline.length}` : `${timeline.length} songs`}
         </div>
-      )}
-      <div className="ride-top">
-        <div className="ride-seg">
-          <span className="chip">{entry ? SEGMENT_SPECS[entry.item.type].label : 'Ready'}</span>
-          <span className="ride-count">
-            {entry ? `Song ${entry.index + 1} of ${timeline.length}` : `${timeline.length} songs`}
-          </span>
-        </div>
-        <div className="ride-song">
-          <div className="ride-title">{entry ? entry.track.title : timeline[0].track.title}</div>
-          <div className="ride-artist">{entry ? entry.track.artist : timeline[0].track.artist}</div>
-          {(entry ?? timeline[0]).track.credit && (
-            <div className="ride-credit">{creditLine((entry ?? timeline[0]).track.credit as TrackCredit)}</div>
-          )}
-        </div>
+        <div className="ride-title">{shown.track.title}</div>
+        <div className="ride-artist">{shown.track.artist}</div>
       </div>
 
-      <div className="ride-main">
-        <div className="ride-level" style={{ background: `linear-gradient(160deg, ${resistanceColor(level, 6)}, ${resistanceColor(level, -8)})` }}>
-          <div className="ride-level-label">Resistance</div>
-          {cue?.zone ? (
-            <div className="ride-level-value word">{resistanceName(level)}</div>
-          ) : (
-            <>
-              <div className="ride-level-value">{level}</div>
-              <div className="ride-level-name">{resistanceName(level)}</div>
-            </>
-          )}
-          <div className="ride-cue">{cue?.label ?? 'Press start'}</div>
+      {holding && (
+        <div className="holdbar">
+          <strong>Song finished.</strong> Press play when the class is ready.
         </div>
+      )}
 
+      <div
+        className="ride-level"
+        style={{ background: `linear-gradient(160deg, ${resistanceColor(level, 6)}, ${resistanceColor(level, -8)})` }}
+      >
+        <div className="ride-level-value word">{resistanceName(level)}</div>
+        <div className="ride-cue">{cue?.label || 'Press play'}</div>
+      </div>
+
+      <div className="ride-row">
         <BeatPulse
           getPhase={phase}
           color={color}
-          label={(entry ?? timeline[0]).cadence > 0 ? String(Math.round((entry ?? timeline[0]).cadence)) : '-'}
+          label={rpm > 0 ? String(Math.round(rpm)) : '-'}
           sublabel={cadenceNote}
         />
-      </div>
-
-      {(() => {
-        const ahead = status === 'playing' ? changeAhead(state, 5) : null;
-        return ahead ? (
-          <div className="warning" style={{ background: resistanceColor(ahead.cue.resistance) }}>
-            <span className="warning-count">{Math.max(1, Math.ceil(ahead.seconds))}</span>
-            <span>
-              {resistanceName(ahead.cue.resistance)}: {ahead.cue.label}
-            </span>
+        <div className="songleft" aria-label="Time left in this song">
+          <div className="songleft-time">{formatClock(songLeft)}</div>
+          <div className="songleft-label">left in this song</div>
+          <div className="songleft-bar">
+            <div className="songleft-fill" style={{ width: `${songDone * 100}%` }} />
           </div>
-        ) : null;
-      })()}
-
-      <ResistanceScale level={level} nextLevel={nextLevel} large />
-
-      <div className="ride-next">
-        {state.nextCue && cue ? (
-          <>
-            <div>
-              <span className="muted">Next change</span>{' '}
-              <strong>{state.nextCue.label}</strong>{' '}
-              <span className="lvl" style={{ background: resistanceColor(state.nextCue.resistance) }}>
-                {state.nextCue.zone ? resistanceName(state.nextCue.resistance) : state.nextCue.resistance}
-              </span>
-            </div>
-            <div className="countdown">{formatClock(state.cueRemaining)}</div>
-          </>
-        ) : (
-          <div className="muted">Last cue of the class</div>
-        )}
+        </div>
       </div>
 
-      <SegmentStrip timeline={timeline} elapsed={clock.elapsed} onSeek={(s) => void engine.seek(s)} height={72} />
-      <div className="ride-times">
-        <span>{formatClock(state.elapsed)}</span>
-        <span>{formatClock(Math.max(0, state.total - state.elapsed))} left</span>
-      </div>
+      {ahead ? (
+        <div className="warning" style={{ background: resistanceColor(ahead.cue.resistance) }}>
+          <span className="warning-count">{Math.max(1, Math.ceil(ahead.seconds))}</span>
+          <span>
+            {resistanceName(ahead.cue.resistance)}: {ahead.cue.label}
+          </span>
+        </div>
+      ) : (
+        <div className="ride-next">
+          {state.nextCue && cue ? (
+            <>
+              <div>
+                <span className="muted">Next</span> <strong>{state.nextCue.label || resistanceName(state.nextCue.resistance)}</strong>{' '}
+                <span className="lvl" style={{ background: resistanceColor(state.nextCue.resistance) }}>
+                  {resistanceName(state.nextCue.resistance)}
+                </span>
+              </div>
+              <div className="countdown">{formatClock(state.cueRemaining)}</div>
+            </>
+          ) : (
+            <div className="muted">Last part of the class</div>
+          )}
+        </div>
+      )}
 
       <div className="controls">
         <button className="btn round" onClick={prev} aria-label="Previous song" disabled={status === 'idle'}>
@@ -255,70 +238,48 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
         <button className="btn round" onClick={next} aria-label="Next song" disabled={status === 'idle'}>
           ⏭
         </button>
-        <label className="vol">
-          Volume
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={volume}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              setVolume(v);
-              engine.setVolume(v);
-            }}
-          />
-        </label>
-        <label className="vol">
-          <input
-            type="checkbox"
-            checked={pauseBetween}
-            onChange={(e) => {
-              setPauseBetween(e.target.checked);
-              engine.setPauseBetween(e.target.checked);
-            }}
-          />{' '}
-          Stop between songs
-        </label>
-        <button
-          className="btn"
-          onClick={() => void engine.stop()}
-          disabled={status === 'idle'}
-        >
-          Stop
-        </button>
       </div>
 
       {error && <div className="notice warn">{error}</div>}
 
-      {upcoming.length > 0 && (
-        <div className="upnext">
-          <h3>Up next</h3>
-          {upcoming.map((u) => {
-            const span = resistanceSpan(u.cues);
-            return (
-              <div className="upnext-row" key={u.item.id}>
-                <span className="chip small">{SEGMENT_SPECS[u.item.type].label}</span>
-                <span className="grow">{u.track.title}</span>
-                <span className="muted">{u.cadence > 0 ? `${Math.round(u.cadence)} rpm` : 'free pace'}</span>
-                <span className="lvl" style={{ background: resistanceColor(span.low) }}>
-                  {u.item.custom ? resistanceName(span.low) : span.low}
-                </span>
-                {span.low !== span.high && (
-                  <>
-                    <span className="muted">to</span>
-                    <span className="lvl" style={{ background: resistanceColor(span.high) }}>
-                      {u.item.custom ? resistanceName(span.high) : span.high}
-                    </span>
-                  </>
-                )}
-                <span className="muted">{formatClock(u.start - state.elapsed)}</span>
-              </div>
-            );
-          })}
+      <details className="ride-more">
+        <summary>More</summary>
+        <div className="ride-more-body">
+          <div className="muted">
+            Class time {formatClock(state.elapsed)}, {formatClock(Math.max(0, state.total - state.elapsed))} left
+          </div>
+          <label className="vol">
+            <input
+              type="checkbox"
+              checked={pauseBetween}
+              onChange={(e) => {
+                setPauseBetween(e.target.checked);
+                engine.setPauseBetween(e.target.checked);
+              }}
+            />{' '}
+            Stop between songs
+          </label>
+          <label className="vol">
+            Volume
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volume}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setVolume(v);
+                engine.setVolume(v);
+              }}
+            />
+          </label>
+          {shown.track.credit && <div className="ride-credit">{creditLine(shown.track.credit as TrackCredit)}</div>}
+          <button className="btn" onClick={() => void engine.stop()} disabled={status === 'idle'}>
+            Stop class
+          </button>
         </div>
-      )}
+      </details>
     </section>
   );
 }

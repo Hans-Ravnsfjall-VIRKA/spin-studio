@@ -6,6 +6,7 @@ import {
   newSpotifyTracks,
   parseBpmInput,
   parsePlaylistId,
+  type SpotifyDevice,
   type SpotifyPlaylistInfo,
   type SpotifyTrackInfo,
 } from '../models/spotifyModel';
@@ -120,7 +121,7 @@ export function SpotifyPanel({ library }: Props) {
         <h2>Spotify</h2>
         <p className="muted small-text">
           For your own private riding. It needs Spotify Premium and plays through Spotify's own player in this browser
-          tab, on a desktop browser. Spotify's terms cover personal use, so do not use this to teach other people.
+          tab on a computer, or through the Spotify app on an iPhone. Spotify's terms cover personal use, so do not use this to teach other people.
           Spotify does not share tempo data, so you set each song's BPM by tapping along or typing it.
         </p>
 
@@ -164,6 +165,8 @@ export function SpotifyPanel({ library }: Props) {
           </>
         )}
       </div>
+
+      {ready && snap.remote && <DevicePicker chosen={snap.deviceName} />}
 
       {notice && <div className="notice">{notice}</div>}
 
@@ -245,6 +248,57 @@ export function SpotifyPanel({ library }: Props) {
         </>
       )}
     </section>
+  );
+}
+
+function DevicePicker({ chosen }: { chosen: string }) {
+  const [devices, setDevices] = useState<SpotifyDevice[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setDevices(await spotify.devices());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not list your Spotify devices.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <div className="panel">
+      <h3>Play on</h3>
+      <p className="muted small-text">
+        Safari on iPhone cannot play Spotify itself, so the Spotify app plays and this page controls it. Open the Spotify
+        app on the device, play any song for a second, then tap Refresh and pick it. Keep the Spotify app running in the
+        background during class.
+      </p>
+      {chosen && <div className="notice">Playing on {chosen}</div>}
+      {error && <div className="notice warn">{error}</div>}
+      <div className="plist">
+        {devices?.map((d) => (
+          <button
+            key={d.id}
+            className={`plitem${d.name === chosen ? ' on' : ''}`}
+            onClick={() => spotify.chooseDevice(d)}
+          >
+            <span className="grow">{d.name}</span>
+            <span className="muted">{d.type}</span>
+          </button>
+        ))}
+        {devices?.length === 0 && <p className="muted">No devices found. Open the Spotify app and play a song first.</p>}
+      </div>
+      <button className="btn" onClick={() => void refresh()} disabled={loading}>
+        {loading ? 'Looking...' : 'Refresh'}
+      </button>
+    </div>
   );
 }
 

@@ -27,7 +27,7 @@ import { loadClasses, loadDraft, saveClasses, saveDraft } from './storage/librar
 
 type View = 'library' | 'find' | 'spotify' | 'build' | 'ride';
 
-const SPOTIFY_NEEDED = 'This class has Spotify songs. Open the Spotify tab and connect first.';
+const SPOTIFY_NEEDED = 'This class has Spotify songs. Open the Spotify tab, connect and pick where to play.';
 
 const TAB_LABELS: Record<View, string> = {
   library: 'Music',

@@ -1000,3 +1000,52 @@ a {
 @media (prefers-reduced-motion: reduce) {
   .warning { animation: none; }
 }
+
+/* ---------- section editor ---------- */
+.segwrap { display: flex; flex-direction: column; gap: 8px; }
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(127, 127, 127, 0.1);
+}
+.editor-top { justify-content: space-between; gap: 16px; }
+.stepper { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sections { display: flex; flex-direction: column; gap: 8px; }
+.section {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.12);
+}
+.section-time { display: flex; flex-direction: column; min-width: 72px; }
+.section-time input { width: 72px; }
+.section-label { min-width: 140px; }
+.zonepick { display: inline-flex; gap: 6px; }
+.zonedot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(127, 127, 127, 0.5);
+  cursor: pointer;
+  padding: 0;
+}
+.zonedot.on { outline: 3px solid currentColor; outline-offset: 2px; }
+
+/* ---------- simple ride screen ---------- */
+.ride.simple { display: flex; flex-direction: column; gap: 14px; }
+.ride.simple .ride-level { text-align: center; padding: 18px 12px; border-radius: 18px; color: #111; }
+.ride.simple .ride-cue { font-size: clamp(22px, 5vw, 36px); }
+.ride-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.songleft { flex: 1; min-width: 200px; text-align: center; }
+.songleft-time { font-size: clamp(56px, 14vw, 120px); font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.songleft-label { font-size: 15px; opacity: 0.7; margin-bottom: 8px; }
+.songleft-bar { height: 14px; border-radius: 7px; background: rgba(127, 127, 127, 0.25); overflow: hidden; }
+.songleft-fill { height: 100%; background: var(--rc); transition: width 0.3s linear; }
+.ride-more summary { cursor: pointer; opacity: 0.8; }
+.ride-more-body { display: flex; flex-direction: column; gap: 12px; padding-top: 10px; align-items: flex-start; }

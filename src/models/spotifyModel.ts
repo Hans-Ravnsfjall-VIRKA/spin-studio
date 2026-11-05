@@ -194,3 +194,26 @@ export function newSpotifyTracks(infos: SpotifyTrackInfo[], existing: Track[]): 
   }
   return out;
 }
+
+/* ---------- devices ---------- */
+
+export interface SpotifyDevice {
+  id: string;
+  name: string;
+  type: string;
+  isActive: boolean;
+}
+
+/** Devices that can play right now: the Spotify app on a phone, a speaker, a computer. */
+export function normalizeDevices(json: unknown): SpotifyDevice[] {
+  const list = rec(json) && Array.isArray((json as Rec).devices) ? ((json as Rec).devices as unknown[]) : [];
+  const out: SpotifyDevice[] = [];
+  for (const d of list) {
+    const r = rec(d);
+    if (!r) continue;
+    const id = str(r.id);
+    if (!id || r.is_restricted === true) continue;
+    out.push({ id, name: str(r.name) || 'Unnamed device', type: str(r.type), isActive: r.is_active === true });
+  }
+  return out;
+}

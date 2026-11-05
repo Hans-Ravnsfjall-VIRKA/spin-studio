@@ -207,7 +207,9 @@ export function changeAhead(state: PlaybackState, windowSec: number): ChangeAhea
 export function pedalPhaseAt(entry: TimelineEntry, elapsed: number): number {
   const custom = entry.item.custom;
   if (custom) {
-    const rpm = custom.rpm && custom.rpm > 0 ? custom.rpm : 60;
+    const cue = entry.cues.find((c) => elapsed >= c.start && elapsed < c.end);
+    const own = cue?.rpm ?? custom.rpm;
+    const rpm = own && own > 0 ? own : 60;
     const p = ((elapsed - entry.start) / (60 / rpm)) % 1;
     return p < 0 ? p + 1 : p;
   }
@@ -232,7 +234,7 @@ export function removeItem(items: PlanItem[], id: string): PlanItem[] {
 export function updateItem(
   items: PlanItem[],
   id: string,
-  patch: Partial<Pick<PlanItem, 'trackId' | 'type'>>,
+  patch: Partial<Pick<PlanItem, 'trackId' | 'type' | 'custom'>>,
 ): PlanItem[] {
   return items.map((i) => (i.id === id ? { ...i, ...patch } : i));
 }

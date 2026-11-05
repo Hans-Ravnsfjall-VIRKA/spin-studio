@@ -1,14 +1,17 @@
 import type { ExternalPlayer } from '../audio/engine';
+import { isIos } from '../models/platformModel';
 import { needsRefresh, type Tokens } from '../models/spotifyAuthModel';
 import {
   SPOTIFY_PAGE_SIZE,
   hasMorePages,
   normalizePlaylistItems,
+  normalizeDevices,
   normalizePlaylists,
   normalizeSpotifySearch,
   spotifyPlaylistItemsPath,
   spotifyPlaylistsPath,
   spotifySearchPath,
+  type SpotifyDevice,
   type SpotifyPlaylistInfo,
   type SpotifyTrackInfo,
 } from '../models/spotifyModel';
@@ -52,6 +55,10 @@ export interface SpotifySnapshot {
   message: string;
   displayName: string;
   product: string;
+  /** True when this browser cannot play Spotify itself (iPhone, iPad). The Spotify app on a device plays instead. */
+  remote: boolean;
+  /** Name of the device chosen to play on, in remote mode. */
+  deviceName: string;
 }
 
 function loadSdk(): Promise<void> {
@@ -91,13 +98,18 @@ function apiError(res: Response): Error {
 }
 
 class SpotifyController implements ExternalPlayer {
-  private snap: SpotifySnapshot = { phase: 'off', message: '', displayName: '', product: '' };
+  private snap: SpotifySnapshot = { phase: 'off', message: '', displayName: '', product: '', remote: false, deviceName: '' };
   private listeners = new Set<() => void>();
   private player: SpPlayer | null = null;
   private deviceId: string | null = null;
   private starting: Promise<void> | null = null;
   private refreshing: Promise<Tokens> | null = null;
   private volume = 0.9;
+  private remoteId: string | null = null;
+
+  private activeDevice(): string | null {
+    return this.snap.remote ? this.remoteId : this.deviceId;
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -122,7 +134,7 @@ class SpotifyController implements ExternalPlayer {
   }
 
   isReady(): boolean {
-    return this.snap.phase === 'ready' && this.deviceId !== null;
+    return this.snap.phase === 'ready' && this.activeDevice() !== null;
   }
 
   /** Starts the player when a sign-in is already stored. */
@@ -154,9 +166,15 @@ class SpotifyController implements ExternalPlayer {
         });
         return;
       }
+      const remote = isIos(navigator.userAgent, navigator.platform, navigator.maxTouchPoints);
+      if (remote) {
+        // Safari on iPhone cannot run Spotify's player. The Spotify app does the playing.
+        this.set({ phase: 'ready', message: '', displayName, product, remote: true });
+        return;
+      }
       await loadSdk();
       await this.createPlayer();
-      this.set({ phase: 'ready', message: '', displayName, product });
+      this.set({ phase: 'ready', message: '', displayName, product, remote: false });
     } catch (err) {
       this.set({ phase: 'error', message: err instanceof Error ? err.message : 'Could not connect to Spotify.' });
     }
@@ -283,33 +301,69 @@ class SpotifyController implements ExternalPlayer {
   }
 
   async play(uri: string, positionSec: number): Promise<void> {
-    if (!this.deviceId) throw new Error('Spotify is not connected. Open the Spotify tab and connect.');
-    const res = await this.request(`/me/player/play?device_id=${encodeURIComponent(this.deviceId)}`, {
+    const device = this.activeDevice();
+    if (!device) throw new Error('Spotify is not connected. Open the Spotify tab, connect and pick where to play.');
+    const res = await this.request(`/me/player/play?device_id=${encodeURIComponent(device)}`, {
       method: 'PUT',
       body: JSON.stringify({ uris: [uri], position_ms: Math.round(positionSec * 1000) }),
     });
+    if (res.status === 404 && this.snap.remote) {
+      throw new Error('Spotify could not find that device. Open the Spotify app on it, play any song for a second, then try again.');
+    }
     if (!res.ok && res.status !== 204) throw apiError(res);
   }
 
   async pause(): Promise<void> {
+    if (this.snap.remote) {
+      const device = this.remoteId;
+      if (device) await this.request(`/me/player/pause?device_id=${encodeURIComponent(device)}`, { method: 'PUT' });
+      return;
+    }
     await this.player?.pause();
   }
 
   async resume(): Promise<void> {
+    if (this.snap.remote) {
+      const device = this.remoteId;
+      if (device) await this.request(`/me/player/play?device_id=${encodeURIComponent(device)}`, { method: 'PUT' });
+      return;
+    }
     await this.player?.resume();
   }
 
   setVolume(volume: number): void {
     this.volume = volume;
+    if (this.snap.remote) {
+      const device = this.remoteId;
+      if (device) {
+        void this.request(
+          `/me/player/volume?volume_percent=${Math.round(volume * 100)}&device_id=${encodeURIComponent(device)}`,
+          { method: 'PUT' },
+        ).catch(() => undefined);
+      }
+      return;
+    }
     void this.player?.setVolume(volume).catch(() => undefined);
+  }
+
+  /* ---------- playing on another device ---------- */
+
+  async devices(): Promise<SpotifyDevice[]> {
+    return normalizeDevices(await this.api<unknown>('/me/player/devices'));
+  }
+
+  chooseDevice(device: SpotifyDevice | null): void {
+    this.remoteId = device ? device.id : null;
+    this.set({ deviceName: device ? device.name : '' });
   }
 
   logout(): void {
     this.player?.disconnect();
     this.player = null;
     this.deviceId = null;
+    this.remoteId = null;
     clearSession();
-    this.set({ phase: 'off', message: '', displayName: '', product: '' });
+    this.set({ phase: 'off', message: '', displayName: '', product: '', remote: false, deviceName: '' });
   }
 }
 

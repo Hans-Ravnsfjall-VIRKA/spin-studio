@@ -18,6 +18,7 @@ import {
   type TimelineEntry,
 } from './models/classPlanModel';
 import { usesExternalPlayer } from './models/externalPlayModel';
+import { parsePlaylistId } from './models/spotifyModel';
 import type { SegmentType } from './models/segmentModel';
 import type { Track } from './models/trackModel';
 import { finishLoginFromUrl } from './spotify/auth';
@@ -93,6 +94,19 @@ export default function App() {
       }
     });
   }, []);
+
+  /** Reads a Spotify playlist into the library and returns the songs that were new. */
+  const importPlaylist = useCallback(
+    async (link: string): Promise<Track[]> => {
+      const id = parsePlaylistId(link);
+      if (!id) throw new Error('That is not a Spotify playlist link.');
+      if (!spotify.isReady()) throw new Error('Connect Spotify first, in the Spotify tab.');
+      const infos = await spotify.playlistTracks(id);
+      if (infos.length === 0) throw new Error('Spotify returned no songs for this playlist.');
+      return library.addSpotify(infos, null);
+    },
+    [library],
+  );
 
   const trackById = useMemo(() => new Map(library.tracks.map((t) => [t.id, t])), [library.tracks]);
 
@@ -204,6 +218,7 @@ export default function App() {
             tracks={library.tracks}
             draft={draft}
             onChange={patchDraft}
+            onImportPlaylist={importPlaylist}
             classes={classes}
             onSave={saveCurrent}
             onLoad={(id) => {

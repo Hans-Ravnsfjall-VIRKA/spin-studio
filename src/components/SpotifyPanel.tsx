@@ -104,7 +104,7 @@ export function SpotifyPanel({ library }: Props) {
   };
 
   const addAll = () => {
-    const n = library.addSpotify(openTracks, null);
+    const n = library.addSpotify(openTracks, null).length;
     setNotice(
       n > 0
         ? `Added ${n} songs. Open the Music tab, play each one and tap along to set its tempo. Songs without a tempo stay out of your classes until then.`

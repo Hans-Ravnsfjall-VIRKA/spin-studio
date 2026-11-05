@@ -27,6 +27,8 @@ interface Props {
   tracks: Track[];
   draft: ClassPlan;
   onChange: (patch: Partial<ClassPlan>) => void;
+  /** Reads a playlist into the library and returns the songs that were new. */
+  onImportPlaylist: (link: string) => Promise<Track[]>;
   classes: ClassPlan[];
   onSave: () => void;
   onLoad: (id: string) => void;
@@ -50,6 +52,7 @@ export function Builder({
   tracks,
   draft,
   onChange,
+  onImportPlaylist,
   classes,
   onSave,
   onLoad,
@@ -63,6 +66,9 @@ export function Builder({
   const [minutes, setMinutes] = useState(45);
   const [addType, setAddType] = useState<SegmentType>('flat');
   const [planId, setPlanId] = useState(PLAN_TEMPLATES[0].id);
+  const [link, setLink] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadMessage, setLoadMessage] = useState<string | null>(null);
 
   const timeline = useMemo(() => buildTimeline(draft.items, tracks), [draft.items, tracks]);
   const total = totalDuration(timeline);
@@ -75,10 +81,26 @@ export function Builder({
     [tracks],
   );
 
-  const loadPlan = () => {
+  const loadPlan = async () => {
     const plan = PLAN_TEMPLATES.find((p) => p.id === planId);
     if (!plan) return;
-    onChange({ name: plan.name, items: instantiatePlan(plan, tracks, () => newId('seg')) });
+    let pool = tracks;
+    let message: string | null = null;
+    if (link.trim()) {
+      setLoading(true);
+      try {
+        const added = await onImportPlaylist(link);
+        pool = [...tracks, ...added];
+      } catch (e) {
+        message = `${e instanceof Error ? e.message : 'The playlist could not be read.'} The plan was loaded without it.`;
+      } finally {
+        setLoading(false);
+      }
+    }
+    const items = instantiatePlan(plan, pool, () => newId('seg'));
+    const missing = unresolvedCount(items, pool);
+    onChange({ name: plan.name, items });
+    setLoadMessage(message ?? (missing === 0 ? 'All songs found.' : `${missing} songs were not found. Pick them below.`));
   };
 
   const generate = () => {
@@ -160,10 +182,22 @@ export function Builder({
               ))}
             </select>
           </label>
-          <button className="btn" onClick={loadPlan}>
-            Load plan
+        </div>
+        <div className="row wrap planload">
+          <label className="field grow">
+            <span>Spotify playlist link (optional, reads the songs first)</span>
+            <input
+              type="text"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              placeholder="https://open.spotify.com/playlist/..."
+            />
+          </label>
+          <button className="btn primary" onClick={() => void loadPlan()} disabled={loading}>
+            {loading ? 'Reading playlist...' : 'Load plan'}
           </button>
         </div>
+        {loadMessage && <div className="notice">{loadMessage}</div>}
         <p className="muted small-text">
           A written plan keeps your RPM and color changes. Its songs are found in your library by title and artist.
         </p>

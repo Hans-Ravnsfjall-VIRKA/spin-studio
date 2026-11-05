@@ -28,8 +28,8 @@ export interface Library {
   imports: ImportStatus[];
   addFiles: (files: FileList | File[]) => Promise<void>;
   importOnline: (online: OnlineTrack) => Promise<OnlineImportResult>;
-  /** Adds Spotify songs that are not in the library yet. A null tempo leaves it to be set later. Returns how many were added. */
-  addSpotify: (infos: SpotifyTrackInfo[], bpm: number | null) => number;
+  /** Adds Spotify songs that are not in the library yet. A null tempo leaves it to be set later. Returns the songs that were added. */
+  addSpotify: (infos: SpotifyTrackInfo[], bpm: number | null) => Track[];
   updateTrack: (id: string, patch: Partial<Pick<Track, 'title' | 'artist' | 'bpm' | 'energy' | 'beatOffset'>>) => void;
   removeTrack: (id: string) => Promise<void>;
 }
@@ -134,10 +134,10 @@ export function useLibrary(): Library {
   const addSpotify = useCallback<Library['addSpotify']>(
     (infos, bpm) => {
       const fresh = newSpotifyTracks(infos, userTracks);
-      if (fresh.length === 0) return 0;
+      if (fresh.length === 0) return [];
       const added = fresh.map((info) => trackFromSpotify(info, bpm, newId('sp')));
       setUserTracks((prev) => [...prev, ...added]);
-      return added.length;
+      return added;
     },
     [userTracks],
   );

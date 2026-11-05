@@ -1,8 +1,11 @@
+import { Browser } from '@capacitor/browser';
 import {
+  NATIVE_REDIRECT_URI,
   SPOTIFY_TOKEN_URL,
   authCodeBody,
   authorizeUrl,
   parseRedirect,
+  queryFromUrl,
   pkceChallenge,
   randomString,
   redirectUriFor,
@@ -10,6 +13,7 @@ import {
   tokensFromResponse,
   type Tokens,
 } from '../models/spotifyAuthModel';
+import { isNativeApp } from '../native';
 import { clearPending, clearSession, loadPending, saveClientId, savePending, saveSession } from './session';
 
 /** Sends the browser to Spotify to sign in (authorization code flow with PKCE, no server needed). */
@@ -17,10 +21,14 @@ export async function beginLogin(clientId: string): Promise<void> {
   const verifier = randomString(crypto.getRandomValues(new Uint8Array(64)));
   const state = randomString(crypto.getRandomValues(new Uint8Array(16)));
   const challenge = await pkceChallenge(verifier);
-  const redirectUri = redirectUriFor(window.location);
+  const native = isNativeApp();
+  const redirectUri = native ? NATIVE_REDIRECT_URI : redirectUriFor(window.location);
   saveClientId(clientId);
   savePending({ verifier, state, redirectUri, clientId });
-  window.location.assign(authorizeUrl({ clientId, redirectUri, challenge, state }));
+  const url = authorizeUrl({ clientId, redirectUri, challenge, state });
+  // In the installed app the sign-in opens in Safari and returns through the spinstudio:// link.
+  if (native) await Browser.open({ url });
+  else window.location.assign(url);
 }
 
 export type LoginResult = { kind: 'none' } | { kind: 'connected' } | { kind: 'error'; message: string };
@@ -37,12 +45,22 @@ async function postToken(body: string): Promise<unknown> {
 
 /** Call once on page load. Completes a sign-in when the page was opened by Spotify's redirect. */
 export async function finishLoginFromUrl(): Promise<LoginResult> {
+  return finishLogin(window.location.search, true);
+}
+
+/** The installed app got a spinstudio://callback link back from Spotify. */
+export async function finishLoginFromAppLink(url: string): Promise<LoginResult> {
+  void Browser.close().catch(() => undefined);
+  return finishLogin(queryFromUrl(url), false);
+}
+
+async function finishLogin(search: string, cleanAddress: boolean): Promise<LoginResult> {
   const pending = loadPending();
-  const result = parseRedirect(window.location.search, pending ? pending.state : null);
+  const result = parseRedirect(search, pending ? pending.state : null);
   if (result.kind === 'none') return { kind: 'none' };
 
   // Clean the address first so a reload or a second call cannot reuse the one-time code.
-  window.history.replaceState(null, '', window.location.pathname);
+  if (cleanAddress) window.history.replaceState(null, '', window.location.pathname);
   clearPending();
   if (result.kind === 'error') return { kind: 'error', message: result.message };
   if (!pending) return { kind: 'none' };

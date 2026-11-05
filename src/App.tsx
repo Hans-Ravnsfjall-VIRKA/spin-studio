@@ -21,7 +21,9 @@ import { usesExternalPlayer } from './models/externalPlayModel';
 import { parsePlaylistId } from './models/spotifyModel';
 import type { SegmentType } from './models/segmentModel';
 import type { Track } from './models/trackModel';
-import { finishLoginFromUrl } from './spotify/auth';
+import { App as NativeApp } from '@capacitor/app';
+import { isNativeApp } from './native';
+import { finishLoginFromAppLink, finishLoginFromUrl } from './spotify/auth';
 import { spotify } from './spotify/controller';
 import { loadClasses, loadDraft, saveClasses, saveDraft } from './storage/libraryStorage';
 
@@ -107,6 +109,25 @@ export default function App() {
     },
     [library],
   );
+
+  // The installed app comes back from Spotify's sign-in through a spinstudio:// link.
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    const handle = NativeApp.addListener('appUrlOpen', ({ url }) => {
+      void finishLoginFromAppLink(url).then((result) => {
+        if (result.kind === 'connected') {
+          setView('spotify');
+          void spotify.start();
+        } else if (result.kind === 'error') {
+          setView('spotify');
+          spotify.reportError(result.message);
+        }
+      });
+    });
+    return () => {
+      void handle.then((h) => h.remove());
+    };
+  }, []);
 
   const trackById = useMemo(() => new Map(library.tracks.map((t) => [t.id, t])), [library.tracks]);
 

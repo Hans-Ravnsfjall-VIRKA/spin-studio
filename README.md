@@ -70,6 +70,17 @@ Build tab, Edit on any song. Each song is split into sections with a zone (white
 
 Safari cannot run Spotify's player. In the Spotify tab, Play on lists your Spotify devices. Open the Spotify app on the phone, play a song for a second, press Refresh and pick it. The page then controls the app. Songs from files and the built-in songs play in the page itself.
 
+## iPhone app (Xcode)
+
+The same code runs as an iPhone app through Capacitor. The Xcode project is in `ios/`.
+
+1. `npm install`, then `npm run ios`. It builds the web app, copies it into the project and opens Xcode.
+2. In Xcode, select the App target, Signing & Capabilities, tick Automatically manage signing and choose your Team (your Apple ID works).
+3. Plug in the iPhone, pick it at the top of Xcode and press Run. On the phone, trust the developer under Settings, General, VPN & Device Management.
+4. In the Spotify developer dashboard add the redirect URI `spinstudio://callback` to your app.
+
+The app keeps the screen on, keeps the class clock running with the screen locked, and mixes with the Spotify app. After changing the web code run `npm run ios` again. A free Apple ID install lasts 7 days, then run it from Xcode again. Icon and splash come from `assets/`; `npm run assets` regenerates them.
+
 ## Layout
 
 ```

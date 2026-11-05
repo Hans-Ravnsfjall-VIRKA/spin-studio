@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Library } from '../hooks/useLibrary';
 import { formatClock } from '../models/formatModel';
-import { redirectUriFor, redirectUriProblem } from '../models/spotifyAuthModel';
+import { NATIVE_REDIRECT_URI, redirectUriFor, redirectUriProblem } from '../models/spotifyAuthModel';
+import { isNativeApp } from '../native';
 import {
   newSpotifyTracks,
   parseBpmInput,
@@ -22,7 +23,7 @@ interface Props {
 export function SpotifyPanel({ library }: Props) {
   const snap = useSpotify();
   const [clientId, setClientId] = useState(() => loadClientId());
-  const redirectUri = redirectUriFor(window.location);
+  const redirectUri = isNativeApp() ? NATIVE_REDIRECT_URI : redirectUriFor(window.location);
   const problem = redirectUriProblem(redirectUri);
   const ready = snap.phase === 'ready';
 

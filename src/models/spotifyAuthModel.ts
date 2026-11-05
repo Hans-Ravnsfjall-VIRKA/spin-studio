@@ -32,6 +32,17 @@ export async function pkceChallenge(verifier: string): Promise<string> {
   return base64Url(new Uint8Array(digest));
 }
 
+/** The address the installed iPhone app gets Spotify's answer on. Add it in the Spotify dashboard. */
+export const NATIVE_REDIRECT_URI = 'spinstudio://callback';
+
+/** The part after "?" of a link, so the web sign-in code can read an app link. */
+export function queryFromUrl(url: string): string {
+  const i = url.indexOf('?');
+  if (i < 0) return '';
+  const hash = url.indexOf('#', i);
+  return url.slice(i, hash < 0 ? undefined : hash);
+}
+
 export function redirectUriFor(loc: { origin: string; pathname: string }): string {
   return `${loc.origin}${loc.pathname}`;
 }
@@ -44,6 +55,7 @@ export function redirectUriProblem(uri: string): string | null {
   } catch {
     return 'This address is not valid.';
   }
+  if (uri === NATIVE_REDIRECT_URI) return null;
   if (url.protocol === 'https:') return null;
   if (url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === '[::1]')) return null;
   if (url.hostname === 'localhost') {

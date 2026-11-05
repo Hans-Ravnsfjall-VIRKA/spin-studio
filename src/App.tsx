@@ -221,7 +221,19 @@ export default function App() {
         </button>
       )}
 
-      {error && view !== 'ride' && <div className="notice warn">{error}</div>}
+      {error && view !== 'ride' && (
+        <div className="toast" role="alert">
+          <span className="toast-text">{error}</span>
+          {view !== 'spotify' && /spotify/i.test(error) && (
+            <button className="btn" onClick={() => setView('spotify')}>
+              Open Spotify tab
+            </button>
+          )}
+          <button className="btn icon" onClick={() => setError(null)} aria-label="Dismiss">
+            ✕
+          </button>
+        </div>
+      )}
 
       <main>
         {view === 'library' && (

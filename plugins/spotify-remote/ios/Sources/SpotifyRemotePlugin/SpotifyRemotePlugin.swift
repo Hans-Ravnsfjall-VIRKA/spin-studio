@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Capacitor
 import SpotifyiOS
 
@@ -92,11 +93,11 @@ public class SpotifyRemotePlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDeleg
     private func authorize() {
         guard let remote = appRemote else { return }
         triedAuthorize = true
-        remote.authorizeAndPlayURI(attemptUri) { [weak self] success in
-            if !success {
-                self?.failWaiting("The Spotify app is not installed on this iPhone, or could not be opened.")
-            }
+        if let spotifyUrl = URL(string: "spotify:"), !UIApplication.shared.canOpenURL(spotifyUrl) {
+            failWaiting("The Spotify app is not installed on this iPhone.")
+            return
         }
+        _ = remote.authorizeAndPlayURI(attemptUri)
     }
 
     private func armTimeout() {

@@ -1049,3 +1049,104 @@ a {
 .songleft-fill { height: 100%; background: var(--rc); transition: width 0.3s linear; }
 .ride-more summary { cursor: pointer; opacity: 0.8; }
 .ride-more-body { display: flex; flex-direction: column; gap: 12px; padding-top: 10px; align-items: flex-start; }
+
+/* ---------- full width, no zoom, phone layout ---------- */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: pan-x pan-y;
+  overscroll-behavior: none;
+}
+body {
+  overflow-x: hidden;
+  width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+.app {
+  max-width: none;
+  width: 100%;
+  padding-left: max(clamp(12px, 3vw, 32px), env(safe-area-inset-left));
+  padding-right: max(clamp(12px, 3vw, 32px), env(safe-area-inset-right));
+}
+.segnum.plan { color: var(--text); background: var(--panel); border-radius: 8px; padding: 4px 0; font-weight: 900; }
+
+@media (max-width: 760px) {
+  /* 16px or larger stops iPhone from zooming into a field when it is tapped. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+    min-height: 44px;
+  }
+  .btn {
+    min-height: 44px;
+  }
+  .app {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+  .top {
+    padding: calc(8px + env(safe-area-inset-top)) 0 8px;
+    position: static;
+    background: none;
+  }
+  .brand { font-size: 16px; }
+  /* Tabs become a bar at the bottom of the screen, within thumb reach. */
+  .tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    max-width: none;
+    overflow: visible;
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    justify-content: space-between;
+    gap: 2px;
+  }
+  .tab {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+    padding: 12px 2px;
+    font-size: 13px;
+    border-radius: 12px;
+  }
+  .panel { padding: 14px; border-radius: 14px; }
+  .row.wrap { align-items: stretch; }
+  .row.wrap > .field,
+  .row.wrap > button,
+  .row.wrap > select { flex: 1 1 100%; }
+  .field.grow { flex: 1 1 100%; }
+
+  /* A song row becomes two clean lines. */
+  .segrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .segrow .segnum { flex: 0 0 32px; }
+  .segrow .segtype { flex: 1 1 0; min-width: 0; }
+  .segrow .segtrack { flex: 1 1 100%; order: 3; }
+  .segrow .badge { order: 4; }
+  .segrow .span { order: 5; flex: 1 1 auto; }
+  .segrow .time { order: 6; }
+  .segrow .row.tight { order: 7; flex: 1 1 100%; justify-content: space-between; }
+  .segrow .row.tight .btn { flex: 1 1 0; }
+
+  .section { flex-direction: column; align-items: stretch; }
+  .section .section-label { min-width: 0; width: 100%; }
+  .editor { padding: 10px; }
+
+  .miniplayer { position: fixed; left: 8px; right: 8px; bottom: calc(66px + env(safe-area-inset-bottom)); width: auto; z-index: 19; }
+
+  /* Ride: one clean column, big controls */
+  .ride.simple { gap: 12px; }
+  .ride.simple .ride-level-value.word { font-size: clamp(56px, 22vw, 110px); padding: 8px 0; }
+  .ride-row { flex-direction: column; align-items: stretch; }
+  .controls { justify-content: center; gap: 18px; }
+  .ride-more-body { align-items: stretch; }
+}

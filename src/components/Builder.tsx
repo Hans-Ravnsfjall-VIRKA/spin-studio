@@ -294,12 +294,12 @@ export function Builder({
             return (
               <div className="segwrap" key={item.id}>
               <div className="segrow">
-                <div className="segnum">{idx + 1}</div>
-                {item.custom && (
-                  <span className="chip plan" title={item.custom.note ?? 'From your written plan'}>
-                    Plan
-                  </span>
-                )}
+                <div
+                  className={`segnum${item.custom ? ' plan' : ''}`}
+                  title={item.custom ? (item.custom.note ?? 'Your RPM and zones') : undefined}
+                >
+                  {idx + 1}
+                </div>
                 <select
                   className="segtype"
                   value={item.type}

@@ -119,7 +119,8 @@ export class ClassEngine {
 
   async play(fromElapsed = 0): Promise<void> {
     if (this.timeline.length === 0) return;
-    unlockAudio();
+    // Taking over the phone's audio would stop the Spotify app, so only do it for songs this page plays.
+    if (this.timeline.some((e) => e.track.source !== 'spotify')) unlockAudio();
     const ctx = getAudioContext();
     this.ensureGraph(ctx);
     await ctx.resume();

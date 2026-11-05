@@ -90,3 +90,8 @@ src/storage/    localStorage and IndexedDB
 src/hooks/      React hooks
 src/components/ Music, Build and Ride screens
 ```
+
+## Spotify inside the iPhone app
+
+The installed app controls the Spotify app through Spotify's iOS SDK (App Remote), using the local plugin in `plugins/spotify-remote`.
+In the Spotify developer dashboard, add iOS as an SDK, set Bundle ID `fo.virka.spinstudio` and add the redirect URI `spinstudio://spotify-callback`.

@@ -1,5 +1,7 @@
 import type { ExternalPlayer } from '../audio/engine';
 import { isIos } from '../models/platformModel';
+import { isNativeApp } from '../native';
+import { configureRemote, SpotifyRemote } from './nativeRemote';
 import { needsRefresh, type Tokens } from '../models/spotifyAuthModel';
 import {
   SPOTIFY_PAGE_SIZE,
@@ -57,6 +59,8 @@ export interface SpotifySnapshot {
   product: string;
   /** True when this browser cannot play Spotify itself (iPhone, iPad). The Spotify app on a device plays instead. */
   remote: boolean;
+  /** Installed iPhone app: Spotify is driven through its iOS SDK, no device to pick. */
+  native: boolean;
   /** Name of the device chosen to play on, in remote mode. */
   deviceName: string;
 }
@@ -98,7 +102,7 @@ function apiError(res: Response): Error {
 }
 
 class SpotifyController implements ExternalPlayer {
-  private snap: SpotifySnapshot = { phase: 'off', message: '', displayName: '', product: '', remote: false, deviceName: '' };
+  private snap: SpotifySnapshot = { phase: 'off', message: '', displayName: '', product: '', remote: false, native: false, deviceName: '' };
   private listeners = new Set<() => void>();
   private player: SpPlayer | null = null;
   private deviceId: string | null = null;
@@ -134,6 +138,7 @@ class SpotifyController implements ExternalPlayer {
   }
 
   isReady(): boolean {
+    if (this.snap.phase === 'ready' && this.snap.native) return true;
     return this.snap.phase === 'ready' && this.activeDevice() !== null;
   }
 
@@ -167,6 +172,12 @@ class SpotifyController implements ExternalPlayer {
         return;
       }
       const remote = isIos(navigator.userAgent, navigator.platform, navigator.maxTouchPoints);
+      if (remote && isNativeApp()) {
+        // The installed app drives the Spotify app through Spotify's iOS SDK.
+        await configureRemote(loadClientId());
+        this.set({ phase: 'ready', message: '', displayName, product, remote: true, native: true, deviceName: 'This iPhone' });
+        return;
+      }
       if (remote) {
         // Safari on iPhone cannot run Spotify's player. The Spotify app does the playing.
         this.set({ phase: 'ready', message: '', displayName, product, remote: true });
@@ -300,7 +311,23 @@ class SpotifyController implements ExternalPlayer {
     void this.player?.activateElement().catch(() => undefined);
   }
 
+  /**
+   * Connects the Spotify app before a class so the one-time hop to Spotify and back happens
+   * while nothing is running. Stays silent: whatever starts during sign-in is paused.
+   */
+  async prepare(uri: string): Promise<void> {
+    if (!this.snap.native) return;
+    await configureRemote(loadClientId());
+    await SpotifyRemote.connect({ uri });
+    await SpotifyRemote.pause().catch(() => undefined);
+  }
+
   async play(uri: string, positionSec: number): Promise<void> {
+    if (this.snap.native) {
+      await configureRemote(loadClientId());
+      await SpotifyRemote.play({ uri, positionSec });
+      return;
+    }
     const device = this.activeDevice();
     if (!device) throw new Error('Spotify is not connected. Open the Spotify tab, connect and pick where to play.');
     const send = () =>
@@ -318,6 +345,10 @@ class SpotifyController implements ExternalPlayer {
   }
 
   async pause(): Promise<void> {
+    if (this.snap.native) {
+      await SpotifyRemote.pause();
+      return;
+    }
     if (this.snap.remote) {
       const device = this.remoteId;
       if (device) await this.request(`/me/player/pause?device_id=${encodeURIComponent(device)}`, { method: 'PUT' });
@@ -327,6 +358,10 @@ class SpotifyController implements ExternalPlayer {
   }
 
   async resume(): Promise<void> {
+    if (this.snap.native) {
+      await SpotifyRemote.resume();
+      return;
+    }
     if (this.snap.remote) {
       const device = this.remoteId;
       if (device) await this.request(`/me/player/play?device_id=${encodeURIComponent(device)}`, { method: 'PUT' });
@@ -337,6 +372,7 @@ class SpotifyController implements ExternalPlayer {
 
   setVolume(volume: number): void {
     this.volume = volume;
+    if (this.snap.native) return; // Volume is the phone's own buttons.
     if (this.snap.remote) {
       const device = this.remoteId;
       if (device) {
@@ -367,7 +403,7 @@ class SpotifyController implements ExternalPlayer {
     this.deviceId = null;
     this.remoteId = null;
     clearSession();
-    this.set({ phase: 'off', message: '', displayName: '', product: '', remote: false, deviceName: '' });
+    this.set({ phase: 'off', message: '', displayName: '', product: '', remote: false, native: false, deviceName: '' });
   }
 }
 

@@ -28,6 +28,7 @@ import { App as NativeApp } from '@capacitor/app';
 import { isNativeApp } from './native';
 import { finishLoginFromAppLink, finishLoginFromUrl } from './spotify/auth';
 import { spotify } from './spotify/controller';
+import { isAppRemoteLink, SpotifyRemote } from './spotify/nativeRemote';
 import { loadClasses, loadDraft, saveClasses, saveDraft } from './storage/libraryStorage';
 
 type View = 'library' | 'find' | 'spotify' | 'build' | 'ride';
@@ -66,7 +67,7 @@ export default function App() {
   const [rideTimeline, setRideTimeline] = useState<TimelineEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [musicMode, setMusicModeState] = useState<MusicMode>(
-    () => parseMusicMode(loadMusicMode()) ?? defaultMusicMode(isIosDevice()),
+    () => parseMusicMode(loadMusicMode()) ?? defaultMusicMode(isIosDevice(), isNativeApp()),
   );
   const manualMusic = musicMode === 'manual';
   const setMusicMode = (m: MusicMode) => {
@@ -129,6 +130,12 @@ export default function App() {
   useEffect(() => {
     if (!isNativeApp()) return;
     const handle = NativeApp.addListener('appUrlOpen', ({ url }) => {
+      if (isAppRemoteLink(url)) {
+        void SpotifyRemote.handleUrl({ url }).catch((err: unknown) =>
+          spotify.reportError(err instanceof Error ? err.message : 'Spotify did not give access.'),
+        );
+        return;
+      }
       void finishLoginFromAppLink(url).then((result) => {
         if (result.kind === 'connected') {
           setView('spotify');
@@ -195,6 +202,15 @@ export default function App() {
       }
       // Runs inside the click, which is what lets the browser play Spotify audio later.
       spotify.activate();
+      const first = timeline.find((e) => e.track.source === 'spotify' && e.track.spotifyUri);
+      if (first) {
+        try {
+          await spotify.prepare(first.track.spotifyUri as string);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Could not reach the Spotify app.');
+          return;
+        }
+      }
     }
     await stopPreview();
     await classEngine.stop();

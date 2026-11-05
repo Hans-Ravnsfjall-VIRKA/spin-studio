@@ -186,7 +186,11 @@ export function SpotifyPanel({ library, musicMode, onMusicMode }: Props) {
         )}
       </div>
 
-      {ready && snap.remote && (
+      {ready && snap.native && (
+        <NativePlayer testUri={library.tracks.find((t) => t.source === 'spotify' && t.spotifyUri)?.spotifyUri ?? null} />
+      )}
+
+      {ready && snap.remote && !snap.native && (
         <DevicePicker
           chosen={snap.deviceName}
           testUri={library.tracks.find((t) => t.source === 'spotify' && t.spotifyUri)?.spotifyUri ?? null}
@@ -273,6 +277,61 @@ export function SpotifyPanel({ library, musicMode, onMusicMode }: Props) {
         </>
       )}
     </section>
+  );
+}
+
+function NativePlayer({ testUri }: { testUri: string | null }) {
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = async (label: string, action: () => Promise<void>) => {
+    setBusy(true);
+    setMsg(label);
+    try {
+      await action();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Spotify refused the command.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="panel">
+      <h3>Spotify on this iPhone</h3>
+      <p className="muted small-text">
+        Spotify plays through its own app, started and paused from here. The first time, the app jumps to Spotify to ask
+        permission and comes straight back. Connect once before class.
+      </p>
+      {msg && <div className="notice">{msg}</div>}
+      <div className="row wrap">
+        <button
+          className="btn primary"
+          disabled={busy || !testUri}
+          onClick={() =>
+            run('Connecting...', async () => {
+              await spotify.play(testUri as string, 30);
+              setMsg('Connected. A song should be playing now.');
+            })
+          }
+        >
+          Connect and test
+        </button>
+        <button
+          className="btn"
+          disabled={busy}
+          onClick={() =>
+            run('Stopping...', async () => {
+              await spotify.pause();
+              setMsg('Stopped.');
+            })
+          }
+        >
+          Stop
+        </button>
+      </div>
+      {!testUri && <p className="muted small-text">Load a playlist first, then test.</p>}
+    </div>
   );
 }
 

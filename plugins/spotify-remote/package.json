@@ -1,0 +1,16 @@
+{
+  "name": "spotify-remote",
+  "version": "1.0.0",
+  "description": "Controls the Spotify app from Spin Studio through Spotify's iOS SDK (App Remote).",
+  "main": "index.js",
+  "files": ["index.js", "ios/Sources", "Package.swift"],
+  "license": "MIT",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  }
+}

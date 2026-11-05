@@ -9,7 +9,10 @@ export function parseMusicMode(value: unknown): MusicMode | null {
   return value === 'auto' || value === 'manual' ? value : null;
 }
 
-/** On an iPhone, Spotify cannot be controlled reliably from another app, so start with manual. */
-export function defaultMusicMode(remote: boolean): MusicMode {
-  return remote ? 'manual' : 'auto';
+/**
+ * In Safari on an iPhone, Spotify cannot be controlled reliably, so start with manual.
+ * The installed app uses Spotify's iOS SDK and plays on its own.
+ */
+export function defaultMusicMode(remote: boolean, native = false): MusicMode {
+  return remote && !native ? 'manual' : 'auto';
 }

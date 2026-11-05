@@ -148,6 +148,14 @@ export function hasMorePages(json: unknown): boolean {
   return !!root && typeof root.next === 'string' && root.next.length > 0;
 }
 
+/** Playlist id from a share link, a spotify:playlist: uri or a bare 22 character id. */
+export function parsePlaylistId(text: string): string | null {
+  const s = text.trim();
+  const m = /playlist[/:]([A-Za-z0-9]{22})(?![A-Za-z0-9])/.exec(s);
+  if (m) return m[1];
+  return /^[A-Za-z0-9]{22}$/.test(s) ? s : null;
+}
+
 /* ---------- tempo and tracks ---------- */
 
 /** Accepts "128", "127.5" and "127,5". Returns null outside 40 to 220. */

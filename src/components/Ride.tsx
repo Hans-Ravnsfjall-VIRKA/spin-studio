@@ -128,8 +128,11 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
     );
   }
 
-  const cadenceNote =
-    entry && entry.pedalFactor === 0.5
+  const cadenceNote = entry?.item.custom
+    ? entry.item.custom.rpm
+      ? 'RPM from your plan'
+      : 'Free pace, no set RPM'
+    : entry && entry.pedalFactor === 0.5
       ? 'Half time: one pedal stroke every 2 beats'
       : 'One pedal stroke on every beat';
 
@@ -154,15 +157,21 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
       <div className="ride-main">
         <div className="ride-level" style={{ background: `linear-gradient(160deg, ${resistanceColor(level, 6)}, ${resistanceColor(level, -8)})` }}>
           <div className="ride-level-label">Resistance</div>
-          <div className="ride-level-value">{level}</div>
-          <div className="ride-level-name">{resistanceName(level)}</div>
+          {cue?.zone ? (
+            <div className="ride-level-value word">{resistanceName(level)}</div>
+          ) : (
+            <>
+              <div className="ride-level-value">{level}</div>
+              <div className="ride-level-name">{resistanceName(level)}</div>
+            </>
+          )}
           <div className="ride-cue">{cue?.label ?? 'Press start'}</div>
         </div>
 
         <BeatPulse
           getPhase={phase}
           color={color}
-          label={String(Math.round(entry?.cadence ?? timeline[0].cadence))}
+          label={(entry ?? timeline[0]).cadence > 0 ? String(Math.round((entry ?? timeline[0]).cadence)) : '-'}
           sublabel={cadenceNote}
         />
       </div>
@@ -176,7 +185,7 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
               <span className="muted">Next change</span>{' '}
               <strong>{state.nextCue.label}</strong>{' '}
               <span className="lvl" style={{ background: resistanceColor(state.nextCue.resistance) }}>
-                {state.nextCue.resistance}
+                {state.nextCue.zone ? resistanceName(state.nextCue.resistance) : state.nextCue.resistance}
               </span>
             </div>
             <div className="countdown">{formatClock(state.cueRemaining)}</div>
@@ -237,14 +246,18 @@ export function Ride({ engine, timeline, error, onBuild }: Props) {
               <div className="upnext-row" key={u.item.id}>
                 <span className="chip small">{SEGMENT_SPECS[u.item.type].label}</span>
                 <span className="grow">{u.track.title}</span>
-                <span className="muted">{Math.round(u.cadence)} rpm</span>
+                <span className="muted">{u.cadence > 0 ? `${Math.round(u.cadence)} rpm` : 'free pace'}</span>
                 <span className="lvl" style={{ background: resistanceColor(span.low) }}>
-                  {span.low}
+                  {u.item.custom ? resistanceName(span.low) : span.low}
                 </span>
-                <span className="muted">to</span>
-                <span className="lvl" style={{ background: resistanceColor(span.high) }}>
-                  {span.high}
-                </span>
+                {span.low !== span.high && (
+                  <>
+                    <span className="muted">to</span>
+                    <span className="lvl" style={{ background: resistanceColor(span.high) }}>
+                      {u.item.custom ? resistanceName(span.high) : span.high}
+                    </span>
+                  </>
+                )}
                 <span className="muted">{formatClock(u.start - state.elapsed)}</span>
               </div>
             );

@@ -916,3 +916,24 @@ a {
 .bpmin.bad {
   border-color: var(--warn);
 }
+
+/* ---------- written plans ---------- */
+.ride-level-value.word {
+  font-size: clamp(56px, 11vw, 130px);
+  text-transform: capitalize;
+  padding: 24px 0;
+}
+
+.planload {
+  margin-top: 12px;
+  align-items: flex-end;
+}
+
+.chip.plan {
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+.segtrack.missing {
+  outline: 2px solid #e0a100;
+}

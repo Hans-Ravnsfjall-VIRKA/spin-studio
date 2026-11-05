@@ -5,6 +5,7 @@ import { redirectUriFor, redirectUriProblem } from '../models/spotifyAuthModel';
 import {
   newSpotifyTracks,
   parseBpmInput,
+  parsePlaylistId,
   type SpotifyPlaylistInfo,
   type SpotifyTrackInfo,
 } from '../models/spotifyModel';
@@ -69,6 +70,23 @@ export function SpotifyPanel({ library }: Props) {
     } finally {
       setOpenLoading(false);
     }
+  };
+
+  const [link, setLink] = useState('');
+  const openByLink = async () => {
+    const id = parsePlaylistId(link);
+    if (!id) {
+      setOpen(null);
+      setOpenError('That is not a Spotify playlist link.');
+      return;
+    }
+    let name = 'Playlist from link';
+    try {
+      name = await spotify.playlistName(id);
+    } catch {
+      /* the name is optional; loading the songs reports the real problem */
+    }
+    await openPlaylist({ id, name, owner: '', trackCount: 0, imageUrl: null });
   };
 
   const runSearch = async () => {
@@ -168,6 +186,26 @@ export function SpotifyPanel({ library }: Props) {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="panel">
+            <h3>Open a playlist by link</h3>
+            <div className="row">
+              <input
+                className="grow"
+                type="text"
+                value={link}
+                placeholder="https://open.spotify.com/playlist/..."
+                onChange={(e) => setLink(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void openByLink();
+                }}
+              />
+              <button className="btn" onClick={() => void openByLink()} disabled={!link.trim() || openLoading}>
+                Open
+              </button>
+            </div>
+            {open === null && openError && <div className="notice warn">{openError}</div>}
           </div>
 
           {open && (

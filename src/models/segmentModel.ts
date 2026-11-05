@@ -1,5 +1,5 @@
 import type { CadenceRange } from './cadenceModel';
-import { clampResistance } from './resistanceModel';
+import { clampResistance, type ZoneId } from './resistanceModel';
 
 export type SegmentType =
   | 'warmup'
@@ -96,6 +96,8 @@ export interface Cue {
   end: number;
   resistance: number;
   label: string;
+  /** Set on cues that come from a written plan, which gives a color zone and no number. */
+  zone?: ZoneId;
 }
 
 /** Block length in bars (4 beats per bar). Cues change on bar boundaries of the song. */

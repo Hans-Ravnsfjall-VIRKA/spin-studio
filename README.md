@@ -58,6 +58,10 @@ Ranges and levels live in `src/models/segmentModel.ts`.
   - Desktop browsers only. The Spotify player does not run in phone browsers.
 - Files are stored in the browser (IndexedDB). They stay on the device that imported them.
 
+## Written plans
+
+Build tab, Written plan, Load plan. A plan keeps the instructor's own RPM per song and timed color changes (sit, stand, sprint), and can play only part of a song. Songs are found in the library by title and artist, so import the playlist first (Spotify tab, Open a playlist by link). Songs that are not found are picked by hand. Start class stays off until every song is picked. Plans live in `src/data/plans.ts`.
+
 ## Layout
 
 ```

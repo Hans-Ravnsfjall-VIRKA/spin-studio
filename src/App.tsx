@@ -62,11 +62,11 @@ export default function App() {
   useEffect(() => saveDraft(draft), [draft]);
   useEffect(() => saveClasses(classes), [classes]);
 
-  // Drop segments whose song was removed from the library.
+  // Drop segments whose song was removed from the library. Plan songs stay so they can be re-picked.
   useEffect(() => {
     const ids = new Set(library.tracks.map((t) => t.id));
     setDraft((d) => {
-      const kept = d.items.filter((i) => ids.has(i.trackId));
+      const kept = d.items.filter((i) => i.custom || ids.has(i.trackId));
       return kept.length === d.items.length ? d : { ...d, items: kept };
     });
   }, [library.tracks]);

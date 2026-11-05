@@ -252,6 +252,11 @@ class SpotifyController implements ExternalPlayer {
     return out;
   }
 
+  async playlistName(playlistId: string): Promise<string> {
+    const json = await this.api<{ name?: unknown }>(`/playlists/${encodeURIComponent(playlistId)}?fields=name`);
+    return typeof json.name === 'string' && json.name ? json.name : 'Playlist';
+  }
+
   async playlistTracks(playlistId: string): Promise<SpotifyTrackInfo[]> {
     const out: SpotifyTrackInfo[] = [];
     let kind: 'items' | 'tracks' = 'items';

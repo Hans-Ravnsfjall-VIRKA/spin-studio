@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { PLAN_TEMPLATES } from '../data/plans';
 import { newId } from '../lib/id';
 import {
   CLASS_TEMPLATES,
@@ -16,7 +17,8 @@ import {
   type TemplateId,
 } from '../models/classPlanModel';
 import { formatClock, formatPercent } from '../models/formatModel';
-import { resistanceColor } from '../models/resistanceModel';
+import { instantiatePlan, unresolvedCount } from '../models/planImportModel';
+import { resistanceColor, resistanceName } from '../models/resistanceModel';
 import { SEGMENT_SPECS, SEGMENT_TYPES, resistanceSpan, type SegmentType } from '../models/segmentModel';
 import type { Track } from '../models/trackModel';
 import { SegmentStrip } from './SegmentStrip';
@@ -37,6 +39,13 @@ interface Props {
 
 const LENGTHS = [30, 45, 60];
 
+function zoneSpanLabel(levels: number[]): string {
+  if (levels.length === 0) return '';
+  const low = resistanceName(Math.min(...levels));
+  const high = resistanceName(Math.max(...levels));
+  return low === high ? low : `${low} to ${high}`;
+}
+
 export function Builder({
   tracks,
   draft,
@@ -53,11 +62,24 @@ export function Builder({
   const [template, setTemplate] = useState<TemplateId>('mixed');
   const [minutes, setMinutes] = useState(45);
   const [addType, setAddType] = useState<SegmentType>('flat');
+  const [planId, setPlanId] = useState(PLAN_TEMPLATES[0].id);
 
   const timeline = useMemo(() => buildTimeline(draft.items, tracks), [draft.items, tracks]);
   const total = totalDuration(timeline);
   const entryById = useMemo(() => new Map(timeline.map((e) => [e.item.id, e])), [timeline]);
   const outOfRange = timeline.filter((e) => !e.cadenceInRange).length;
+
+  const unresolved = unresolvedCount(draft.items, tracks);
+  const pickable = useMemo(
+    () => tracks.filter((t) => t.source !== 'synth').sort((a, b) => a.title.localeCompare(b.title)),
+    [tracks],
+  );
+
+  const loadPlan = () => {
+    const plan = PLAN_TEMPLATES.find((p) => p.id === planId);
+    if (!plan) return;
+    onChange({ name: plan.name, items: instantiatePlan(plan, tracks, () => newId('seg')) });
+  };
 
   const generate = () => {
     const items = autoBuildClass(tracks, template, minutes, {
@@ -127,6 +149,24 @@ export function Builder({
           </button>
         </div>
         <p className="muted small-text">{CLASS_TEMPLATES[template].blurb}. Songs are matched to each segment by cadence and energy.</p>
+        <div className="row wrap planload">
+          <label className="field grow">
+            <span>Written plan</span>
+            <select value={planId} onChange={(e) => setPlanId(e.target.value)}>
+              {PLAN_TEMPLATES.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="btn" onClick={loadPlan}>
+            Load plan
+          </button>
+        </div>
+        <p className="muted small-text">
+          A written plan keeps your RPM and color changes. Its songs are found in your library by title and artist.
+        </p>
       </div>
 
       <div className="panel">
@@ -141,11 +181,17 @@ export function Builder({
             <button className="btn" onClick={onSave} disabled={timeline.length === 0}>
               Save class
             </button>
-            <button className="btn primary" onClick={onStart} disabled={timeline.length === 0}>
+            <button className="btn primary" onClick={onStart} disabled={timeline.length === 0 || unresolved > 0}>
               Start class
             </button>
           </div>
         </div>
+        {unresolved > 0 && (
+          <div className="notice warn">
+            {unresolved} {unresolved === 1 ? 'song is' : 'songs are'} not picked yet. Add them from the Spotify tab, then
+            choose each one below.
+          </div>
+        )}
         <SegmentStrip timeline={timeline} height={84} />
         <div className="strip-legend">
           <span>Bar height and color show resistance: white is none, then blue, green, yellow and red</span>
@@ -162,6 +208,11 @@ export function Builder({
             return (
               <div className="segrow" key={item.id}>
                 <div className="segnum">{idx + 1}</div>
+                {item.custom && (
+                  <span className="chip plan" title={item.custom.note ?? 'From your written plan'}>
+                    Plan
+                  </span>
+                )}
                 <select
                   className="segtype"
                   value={item.type}
@@ -175,12 +226,22 @@ export function Builder({
                   ))}
                 </select>
                 <select
-                  className="segtrack"
+                  className={`segtrack${item.custom && !entry ? ' missing' : ''}`}
                   value={item.trackId}
                   onChange={(e) => onChange({ items: updateItem(draft.items, item.id, { trackId: e.target.value }) })}
                   aria-label="Song"
                 >
-                  {ranked.map((r) => (
+                  {item.custom ? (
+                    <>
+                      {!entry && <option value="">Pick a song</option>}
+                      {pickable.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.title} · {t.artist}
+                        </option>
+                      ))}
+                    </>
+                  ) : null}
+                  {(item.custom ? [] : ranked).map((r) => (
                     <option key={r.track.id} value={r.track.id}>
                       {r.track.title} · {r.track.bpm} BPM · {Math.round(r.cadence)} rpm · {formatPercent(r.score)}
                     </option>
@@ -196,7 +257,9 @@ export function Builder({
                         : 'Pedal on every beat'
                   }
                 >
-                  {entry ? Math.round(entry.cadence) : '-'} rpm{entry?.pedalFactor === 0.5 ? ' ½' : ''}
+                  {item.custom && !item.custom.rpm
+                    ? 'no rpm'
+                    : `${entry ? Math.round(entry.cadence) : '-'} rpm${entry?.pedalFactor === 0.5 ? ' ½' : ''}`}
                 </div>
                 <div
                   className="span"
@@ -205,7 +268,11 @@ export function Builder({
                   }}
                   title={`Resistance ${span.low} to ${span.high}`}
                 >
-                  {span.low === span.high ? span.low : `${span.low} to ${span.high}`}
+                  {item.custom
+                    ? zoneSpanLabel(entry?.cues.map((c) => c.resistance) ?? [])
+                    : span.low === span.high
+                      ? span.low
+                      : `${span.low} to ${span.high}`}
                 </div>
                 <div className="muted time">{entry ? formatClock(entry.duration) : ''}</div>
                 <div className="row tight">

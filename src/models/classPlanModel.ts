@@ -9,12 +9,15 @@ import {
   type Cue,
   type SegmentType,
 } from './segmentModel';
+import { customCuesToCues, customDuration, type CustomSegment } from './customPlanModel';
 import { isTempoKnown, type Track } from './trackModel';
 
 export interface PlanItem {
   id: string;
   trackId: string;
   type: SegmentType;
+  /** Set when the instructor's own plan gives the RPM and color changes for this song. */
+  custom?: CustomSegment;
 }
 
 export interface ClassPlan {
@@ -81,9 +84,14 @@ export function buildTimeline(items: PlanItem[], tracks: Track[]): TimelineEntry
     const track = byId.get(item.trackId);
     if (!track || track.duration <= 0) continue;
     const match = matchTrack(track, item.type);
+    const custom = item.custom;
+    const duration = custom ? customDuration(track.duration, custom) : track.duration;
     const start = clock;
-    const end = start + track.duration;
-    const cues = buildCues(item.type, track.duration, track.bpm, track.beatOffset).map((c) => ({
+    const end = start + duration;
+    const baseCues = custom
+      ? customCuesToCues(custom.cues, duration)
+      : buildCues(item.type, duration, track.bpm, track.beatOffset);
+    const cues = baseCues.map((c) => ({
       ...c,
       start: c.start + start,
       end: c.end + start,
@@ -94,10 +102,10 @@ export function buildTimeline(items: PlanItem[], tracks: Track[]): TimelineEntry
       index: entries.length,
       start,
       end,
-      duration: track.duration,
-      cadence: match.cadence,
-      pedalFactor: match.pedalFactor,
-      cadenceInRange: match.cadenceInRange,
+      duration,
+      cadence: custom ? (custom.rpm ?? 0) : match.cadence,
+      pedalFactor: custom ? 1 : match.pedalFactor,
+      cadenceInRange: custom ? true : match.cadenceInRange,
       cues,
     });
     clock = end;
@@ -170,6 +178,12 @@ export function stateAt(timeline: TimelineEntry[], elapsed: number): PlaybackSta
 
 /** Position within the current pedal stroke, 0 up to 1, so the UI can pulse on the beat. */
 export function pedalPhaseAt(entry: TimelineEntry, elapsed: number): number {
+  const custom = entry.item.custom;
+  if (custom) {
+    const rpm = custom.rpm && custom.rpm > 0 ? custom.rpm : 60;
+    const p = ((elapsed - entry.start) / (60 / rpm)) % 1;
+    return p < 0 ? p + 1 : p;
+  }
   const beat = 60 / entry.track.bpm;
   const period = beat / entry.pedalFactor;
   const local = elapsed - entry.start - entry.track.beatOffset;

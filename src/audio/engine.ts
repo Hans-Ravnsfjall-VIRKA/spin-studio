@@ -135,11 +135,24 @@ export class ClassEngine {
     this.ensureGraph(ctx);
     await ctx.resume();
     const start = Math.max(0, Math.min(fromElapsed, this.total - 0.001));
+    // A song that starts right away is started first, so the countdown begins when the music does.
+    // Connecting to the Spotify app can take a few seconds the first time.
+    const first = this.external ? externalAction(this.timeline, start, null) : { kind: 'none' as const };
+    let startedIdx: number | null = null;
+    if (first.kind === 'play' && this.external) {
+      startedIdx = first.index;
+      try {
+        await this.external.play(first.uri, first.positionSec);
+      } catch (err) {
+        this.onError?.(err instanceof Error && err.message ? err.message : 'Spotify could not start the song.');
+      }
+      await ctx.resume();
+    }
     this.t0 = ctx.currentTime - start;
     this.status = 'playing';
     this.holding = false;
     this.updateHold(start);
-    this.schedule(start);
+    this.schedule(start, startedIdx);
     this.startTimer();
   }
 
@@ -160,7 +173,9 @@ export class ClassEngine {
       try {
         await this.external.resume();
       } catch {
-        /* the next tick will not restart it, the rider can press play again */
+        // Spotify lost the song: start it again at the right place.
+        this.extActive = null;
+        this.tickExternal(this.elapsed);
       }
     }
   }
@@ -245,10 +260,12 @@ export class ClassEngine {
     this.buffers.clear();
   }
 
-  private schedule(elapsed: number): void {
+  private schedule(elapsed: number, externalStarted: number | null = null): void {
     const ctx = getAudioContext();
     this.epoch++;
     this.clearSources();
+    // Clearing stops the outside player. A song that was just started there keeps playing.
+    this.extActive = externalStarted;
     this.bus = ctx.createGain();
     this.bus.connect(this.master as GainNode);
 
@@ -269,6 +286,8 @@ export class ClassEngine {
   private tick(): void {
     if (this.status !== 'playing') return;
     const ctx = getAudioContext();
+    // Switching to the Spotify app can interrupt the audio clock. Restart it when we are back.
+    if (ctx.state !== 'running') void ctx.resume().catch(() => undefined);
     const elapsed = ctx.currentTime - this.t0;
 
     if (elapsed >= this.total) {

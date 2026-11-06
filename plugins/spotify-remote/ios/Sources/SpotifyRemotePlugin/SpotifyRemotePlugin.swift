@@ -25,6 +25,7 @@ public class SpotifyRemotePlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDeleg
     private var waiting: [CAPPluginCall] = []
     private var attemptUri = ""
     private var triedAuthorize = false
+    private var stage = "starting"
     private var timeout: DispatchWorkItem?
 
     // MARK: setup
@@ -82,6 +83,8 @@ public class SpotifyRemotePlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDeleg
         armTimeout()
         let hasToken = !(remote.connectionParameters.accessToken ?? "").isEmpty
         if hasToken {
+            stage = "connecting with saved token"
+            print("[SpotifyRemote] connect with saved token")
             remote.connect()
         } else {
             authorize()
@@ -97,13 +100,18 @@ public class SpotifyRemotePlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDeleg
             failWaiting("The Spotify app is not installed on this iPhone.")
             return
         }
-        _ = remote.authorizeAndPlayURI(attemptUri)
+        stage = "asked Spotify to authorize"
+        print("[SpotifyRemote] authorizeAndPlayURI \(attemptUri)")
+        DispatchQueue.main.async {
+            _ = remote.authorizeAndPlayURI(self.attemptUri)
+        }
     }
 
     private func armTimeout() {
         timeout?.cancel()
         let item = DispatchWorkItem { [weak self] in
-            self?.failWaiting("Spotify did not answer. Open the Spotify app once, then try again.")
+            let where_ = self?.stage ?? ""
+            self?.failWaiting("Spotify did not answer (stopped at: \(where_)). Open the Spotify app once, then try again.")
         }
         timeout = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: item)
@@ -142,6 +150,8 @@ public class SpotifyRemotePlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDeleg
                 call.reject("Spotify remote is not configured.")
                 return
             }
+            print("[SpotifyRemote] handleUrl \(url.absoluteString)")
+            self.stage = "got link back from Spotify"
             let parameters = remote.authorizationParameters(from: url)
             if let token = parameters?[SPTAppRemoteAccessTokenKey] {
                 remote.connectionParameters.accessToken = token
@@ -213,11 +223,13 @@ public class SpotifyRemotePlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDeleg
     // MARK: SPTAppRemoteDelegate
 
     public func appRemoteDidEstablishConnection(_ appRemote: SPTAppRemote) {
+        print("[SpotifyRemote] connected")
         finishWaiting()
         notifyListeners("connectionChanged", data: ["connected": true])
     }
 
     public func appRemote(_ appRemote: SPTAppRemote, didFailConnectionAttemptWithError error: Error?) {
+        print("[SpotifyRemote] connection failed: \(String(describing: error))")
         if !waiting.isEmpty && !triedAuthorize {
             // The saved token is old or Spotify was not running: ask again, which wakes Spotify.
             authorize()

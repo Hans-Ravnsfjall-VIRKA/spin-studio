@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/spotify/ios-sdk.git",
       "state" : {
-        "revision" : "abb7052d6c6969c79d52ba7fe8b9ddb5f2613f79",
-        "version" : "1.2.5"
+        "revision" : "5bd49e227145dee4871b1667bf81a2b896590176",
+        "version" : "2.1.7"
       }
     }
   ],

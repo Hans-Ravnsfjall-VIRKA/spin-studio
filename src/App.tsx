@@ -218,6 +218,8 @@ export default function App() {
     setRideTimeline(timeline);
     setError(null);
     setView('ride');
+    // Starting a class starts the class: the first song and the countdown begin right away.
+    void classEngine.play(0).catch(() => setError('Audio could not start. Press Play.'));
   }, [classEngine, draft.items, library.tracks, stopPreview]);
 
   const patchDraft = useCallback((patch: Partial<ClassPlan>) => {

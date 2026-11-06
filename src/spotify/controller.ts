@@ -251,10 +251,13 @@ class SpotifyController implements ExternalPlayer {
 
   private async request(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
     const token = await this.token(!retry);
+    const abort = new AbortController();
+    const timer = window.setTimeout(() => abort.abort(), 8000);
     const res = await fetch(`${API}${path}`, {
       ...init,
+      signal: abort.signal,
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
+    }).finally(() => window.clearTimeout(timer));
     if (res.status === 401 && retry) return this.request(path, init, false);
     return res;
   }
@@ -311,20 +314,56 @@ class SpotifyController implements ExternalPlayer {
     void this.player?.activateElement().catch(() => undefined);
   }
 
+  private async nativeConnected(): Promise<boolean> {
+    try {
+      return (await SpotifyRemote.isConnected()).connected;
+    } catch {
+      return false;
+    }
+  }
+
+  /** The phone's own Spotify player, as Spotify's web service sees it. */
+  private async webDevice(): Promise<string | null> {
+    try {
+      const list = await this.devices();
+      const pick = list.find((d) => d.isActive) ?? list.find((d) => /smartphone/i.test(d.type));
+      return pick ? pick.id : null;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Connects the Spotify app before a class so the one-time hop to Spotify and back happens
-   * while nothing is running. Stays silent: whatever starts during sign-in is paused.
+   * while nothing is running. The first song may start playing while you wait to press Play.
    */
   async prepare(uri: string): Promise<void> {
     if (!this.snap.native) return;
     await configureRemote(loadClientId());
+    // Spotify must keep playing here: the moment it is paused, iOS suspends it and the link drops.
     await SpotifyRemote.connect({ uri });
-    await SpotifyRemote.pause().catch(() => undefined);
   }
 
   async play(uri: string, positionSec: number): Promise<void> {
     if (this.snap.native) {
       await configureRemote(loadClientId());
+      console.log('[spotify] play: checking link');
+      if (!(await this.nativeConnected())) {
+        console.log('[spotify] play: link down, trying web service');
+        // Spotify keeps playing after the link drops, and then Spotify's web service can still steer it.
+        const device = await this.webDevice();
+        if (device) {
+          const res = await this.request(`/me/player/play?device_id=${encodeURIComponent(device)}`, {
+            method: 'PUT',
+            body: JSON.stringify({ uris: [uri], position_ms: Math.round(positionSec * 1000) }),
+          });
+          console.log(`[spotify] play: web service answered ${res.status}`);
+          if (res.ok || res.status === 204) return;
+        } else {
+          console.log('[spotify] play: no device found');
+        }
+      }
+      console.log('[spotify] play: using the link');
       await SpotifyRemote.play({ uri, positionSec });
       return;
     }
@@ -346,7 +385,16 @@ class SpotifyController implements ExternalPlayer {
 
   async pause(): Promise<void> {
     if (this.snap.native) {
-      await SpotifyRemote.pause();
+      if (await this.nativeConnected()) {
+        try {
+          await SpotifyRemote.pause();
+          return;
+        } catch {
+          /* the link refused; Spotify's web service can pause it */
+        }
+      }
+      const device = await this.webDevice();
+      if (device) await this.request(`/me/player/pause?device_id=${encodeURIComponent(device)}`, { method: 'PUT' });
       return;
     }
     if (this.snap.remote) {
@@ -359,7 +407,19 @@ class SpotifyController implements ExternalPlayer {
 
   async resume(): Promise<void> {
     if (this.snap.native) {
-      await SpotifyRemote.resume();
+      if (await this.nativeConnected()) {
+        try {
+          await SpotifyRemote.resume();
+          return;
+        } catch {
+          /* the link refused; try Spotify's web service */
+        }
+      }
+      const device = await this.webDevice();
+      const res = device
+        ? await this.request(`/me/player/play?device_id=${encodeURIComponent(device)}`, { method: 'PUT' })
+        : null;
+      if (!res || !(res.ok || res.status === 204)) throw new Error('Spotify is not connected.');
       return;
     }
     if (this.snap.remote) {

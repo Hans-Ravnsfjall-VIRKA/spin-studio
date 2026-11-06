@@ -9,8 +9,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Keep the class clock alive with the screen locked, and play alongside the Spotify app.
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
-        try? AVAudioSession.sharedInstance().setActive(true)
+        // The app's own audio session is left alone: holding it open can silence the Spotify app,
+        // which then gets suspended and drops the link. The web page asks for audio only when it plays sound.
         // A spin class should never dim the screen.
         application.isIdleTimerDisabled = true
         return true

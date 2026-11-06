@@ -26,6 +26,9 @@ public class SpotifyRemotePlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDeleg
     private var attemptUri = ""
     private var triedAuthorize = false
     private var stage = "starting"
+    /// Song Spotify itself started during sign-in, so it is not sent a second time.
+    private var startedBySignIn: String?
+    private var reconnects = 0
     private var timeout: DispatchWorkItem?
 
     // MARK: setup
@@ -101,6 +104,7 @@ public class SpotifyRemotePlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDeleg
             return
         }
         stage = "asked Spotify to authorize"
+        startedBySignIn = attemptUri.isEmpty ? nil : attemptUri
         print("[SpotifyRemote] authorizeAndPlayURI \(attemptUri)")
         DispatchQueue.main.async {
             _ = remote.authorizeAndPlayURI(self.attemptUri)
@@ -180,6 +184,16 @@ public class SpotifyRemotePlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDeleg
                     call.reject("Spotify is not ready.")
                     return
                 }
+                if self.startedBySignIn == uri {
+                    // Spotify already started this song while signing in. Just move to the right place.
+                    self.startedBySignIn = nil
+                    if positionMs > 500 {
+                        api.seek(toPosition: positionMs, callback: { _, _ in })
+                    }
+                    call.resolve()
+                    return
+                }
+                self.startedBySignIn = nil
                 api.play(uri, callback: { _, error in
                     if let error = error {
                         call.reject(error.localizedDescription)
@@ -220,10 +234,21 @@ public class SpotifyRemotePlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDeleg
         }
     }
 
+    private func scheduleReconnect(attempt: Int) {
+        guard attempt <= 5 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self = self, let remote = self.appRemote, !remote.isConnected, self.waiting.isEmpty else { return }
+            print("[SpotifyRemote] reconnect attempt \(attempt)")
+            remote.connect()
+            self.scheduleReconnect(attempt: attempt + 1)
+        }
+    }
+
     // MARK: SPTAppRemoteDelegate
 
     public func appRemoteDidEstablishConnection(_ appRemote: SPTAppRemote) {
         print("[SpotifyRemote] connected")
+        reconnects = 0
         finishWaiting()
         notifyListeners("connectionChanged", data: ["connected": true])
     }
@@ -239,6 +264,9 @@ public class SpotifyRemotePlugin: CAPPlugin, CAPBridgedPlugin, SPTAppRemoteDeleg
     }
 
     public func appRemote(_ appRemote: SPTAppRemote, didDisconnectWithError error: Error?) {
+        print("[SpotifyRemote] disconnected: \(String(describing: error))")
+        // Spotify often drops the link for a moment. Try again a few times while it is still alive.
+        scheduleReconnect(attempt: 1)
         notifyListeners("connectionChanged", data: ["connected": false])
     }
 }

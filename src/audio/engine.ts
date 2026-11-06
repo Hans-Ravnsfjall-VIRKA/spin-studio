@@ -27,6 +27,12 @@ export interface ExternalPlayer {
 }
 
 const TICK_MS = 40;
+/** iOS can leave an audio context call pending while another app has the sound. Never wait on it for long. */
+function settle(p: Promise<void>, ms = 500): Promise<void> {
+  return Promise.race([p.catch(() => undefined), new Promise<void>((resolve) => window.setTimeout(resolve, ms))]);
+}
+/** Longest the class clock waits for the first Spotify song to start. */
+const START_WAIT_MS = 6000;
 const LOOKAHEAD_SEC = 0.25;
 /** Start loading a file this many seconds before it is needed. */
 const PRELOAD_SEC = 25;
@@ -36,8 +42,10 @@ const PRELOAD_SEC = 25;
  * clock. File songs are decoded just in time, started on the audio clock, and
  * released after they finish, so a full class never holds every song in memory.
  *
- * Class time is ctx.currentTime minus t0. Suspending the context freezes it,
- * which is how pause works.
+ * Class time is the clock minus t0. The clock is ctx.currentTime, and suspending the
+ * context freezes it, which is how pause works. A class of only Spotify songs plays no
+ * sound here, so it uses the wall clock: iOS interrupts the audio context while the
+ * Spotify app is in front, and an interrupted context would freeze the countdown.
  */
 export class ClassEngine {
   private timeline: TimelineEntry[] = [];
@@ -57,6 +65,8 @@ export class ClassEngine {
   private external: ExternalPlayer | null = null;
   /** Index of the timeline entry the external player is playing, or null. */
   private extActive: number | null = null;
+  private wall = false;
+  private pausedElapsed = 0;
 
   /** When true the class waits at the end of each song until the instructor presses play. */
   pauseBetween = false;
@@ -105,10 +115,41 @@ export class ClassEngine {
     return totalDuration(this.timeline);
   }
 
+  private lastCtx = 0;
+  private lastWall = 0;
+  private interrupted = false;
+
+  /**
+   * Class clock. Normally the audio clock. While iOS has interrupted the audio context (the
+   * Spotify app is in front) the audio clock stands still, so the wall clock keeps time and
+   * the class clock stays continuous when the audio clock comes back.
+   */
+  private now(): number {
+    const w = performance.now() / 1000;
+    if (this.wall) return w;
+    const ctx = getAudioContext();
+    if (ctx.state === 'running') {
+      if (this.interrupted) {
+        const e = this.lastCtx + (w - this.lastWall);
+        this.t0 += ctx.currentTime - e;
+        this.interrupted = false;
+      }
+      this.lastCtx = ctx.currentTime;
+      this.lastWall = w;
+      return ctx.currentTime;
+    }
+    if (this.status === 'playing') {
+      this.interrupted = true;
+      return this.lastCtx + (w - this.lastWall);
+    }
+    return this.lastCtx;
+  }
+
   get elapsed(): number {
     if (this.status === 'idle') return 0;
     if (this.status === 'finished') return this.total;
-    const t = getAudioContext().currentTime - this.t0;
+    if (this.wall && this.status === 'paused') return Math.max(0, Math.min(this.total, this.pausedElapsed));
+    const t = this.now() - this.t0;
     return Math.max(0, Math.min(this.total, t));
   }
 
@@ -130,10 +171,14 @@ export class ClassEngine {
     if (this.timeline.length === 0) return;
     // Taking over the phone's audio would stop the Spotify app, so only do it for songs this page plays.
     // A class of only Spotify songs must not take over the phone's audio, or the Spotify app goes quiet.
-    unlockAudio(this.timeline.some((e) => e.track.source !== 'spotify'));
+    console.log('[engine] play pressed');
+    // Any Spotify song in the class means sharing the phone's audio with the Spotify app.
+    unlockAudio(!this.timeline.some((e) => e.track.source === 'spotify'));
     const ctx = getAudioContext();
+    this.wall = this.timeline.every((e) => e.track.source === 'spotify');
     this.ensureGraph(ctx);
-    await ctx.resume();
+    if (this.wall) void ctx.resume().catch(() => undefined);
+    else await settle(ctx.resume());
     const start = Math.max(0, Math.min(fromElapsed, this.total - 0.001));
     // A song that starts right away is started first, so the countdown begins when the music does.
     // Connecting to the Spotify app can take a few seconds the first time.
@@ -141,14 +186,19 @@ export class ClassEngine {
     let startedIdx: number | null = null;
     if (first.kind === 'play' && this.external) {
       startedIdx = first.index;
-      try {
-        await this.external.play(first.uri, first.positionSec);
-      } catch (err) {
+      // Wait for Spotify, but never more than a few seconds: the class clock must start.
+      const sent = this.external.play(first.uri, first.positionSec).catch((err: unknown) => {
         this.onError?.(err instanceof Error && err.message ? err.message : 'Spotify could not start the song.');
-      }
-      await ctx.resume();
+      });
+      await Promise.race([sent, new Promise<void>((resolve) => window.setTimeout(resolve, START_WAIT_MS))]);
+      void ctx.resume().catch(() => undefined);
     }
-    this.t0 = ctx.currentTime - start;
+    console.log(`[engine] clock starts, wall=${this.wall}, audio=${ctx.state}`);
+    // Anchor the fallback clock to the audio clock before the first reading.
+    this.lastCtx = ctx.currentTime;
+    this.lastWall = performance.now() / 1000;
+    this.interrupted = false;
+    this.t0 = this.now() - start;
     this.status = 'playing';
     this.holding = false;
     this.updateHold(start);
@@ -158,14 +208,16 @@ export class ClassEngine {
 
   async pause(): Promise<void> {
     if (this.status !== 'playing') return;
-    await getAudioContext().suspend();
+    if (this.wall) this.pausedElapsed = this.now() - this.t0;
+    else await settle(getAudioContext().suspend());
     this.status = 'paused';
     await this.pauseExternal();
   }
 
   async resume(): Promise<void> {
     if (this.status !== 'paused') return;
-    await getAudioContext().resume();
+    if (this.wall) this.t0 = this.now() - this.pausedElapsed;
+    else await settle(getAudioContext().resume());
     this.status = 'playing';
     this.holding = false;
     this.updateHold(this.elapsed);
@@ -191,9 +243,8 @@ export class ClassEngine {
       await this.play(elapsed);
       return;
     }
-    const ctx = getAudioContext();
     const target = Math.max(0, Math.min(elapsed, this.total - 0.001));
-    this.t0 = ctx.currentTime - target;
+    this.t0 = this.now() - target;
     this.updateHold(target);
     this.schedule(target);
   }
@@ -203,7 +254,7 @@ export class ClassEngine {
     this.teardown();
     this.status = 'idle';
     const ctx = getAudioContext();
-    if (ctx.state === 'suspended') await ctx.resume();
+    if (ctx.state === 'suspended') await settle(ctx.resume());
   }
 
   /* ---------- internals ---------- */
@@ -287,8 +338,8 @@ export class ClassEngine {
     if (this.status !== 'playing') return;
     const ctx = getAudioContext();
     // Switching to the Spotify app can interrupt the audio clock. Restart it when we are back.
-    if (ctx.state !== 'running') void ctx.resume().catch(() => undefined);
-    const elapsed = ctx.currentTime - this.t0;
+    if (!this.wall && ctx.state !== 'running') void ctx.resume().catch(() => undefined);
+    const elapsed = this.now() - this.t0;
 
     if (elapsed >= this.total) {
       this.finish();
